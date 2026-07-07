@@ -1,7 +1,7 @@
 # node-red-contrib-velbus-2026 — Development Changelog
 
 **Author:** Stuart Hanlon, MDAR Limited (UK Velbus distributor)
-**GitHub:** https://github.com/MDARltd/node-red-contrib-velbus-2026
+**GitHub:** https://github.com/MDAR/node-red-contrib-velbus-2026
 **npm:** node-red-contrib-velbus-2026
 **Status:** Active development — real hardware tested on live client installations
 
