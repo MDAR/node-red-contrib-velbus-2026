@@ -1,0 +1,165 @@
+<script type="text/javascript">
+(function() {
+
+  const BLIND_TYPES = {
+    0x03: { name: 'VMB1BL', channels: 1 },
+    0x09: { name: 'VMB2BL', channels: 2 },
+  };
+
+  RED.nodes.registerType('velbus-blind', {
+    category:  'Velbus (outputs)',
+    color:     '#4A90D9',
+    defaults: {
+      name:       { value: '' },
+      bridge:     { value: '', type: 'velbus-bridge', required: true },
+      address:    { value: '', required: true, validate: function(v) { return /^(0x)?[0-9a-fA-F]{1,2}$/.test(v); } },
+      channel:    { value: 1, required: true },
+      moduleName: { value: '' },
+      typeId:     { value: '' },
+    },
+    inputs:  1,
+    outputs: 1,
+    outputLabels: ['blind events / status'],
+    icon:    'font-awesome/fa-arrows-v',
+    paletteLabel: 'blind',
+
+    label: function() {
+      const t = this.typeId ? BLIND_TYPES[parseInt(this.typeId, 16)] : null;
+      const n = this.name || this.moduleName || (t ? t.name : 'blind');
+      return n + ' ch' + this.channel + ' 0x' +
+        (parseInt(this.address) || 0).toString(16).padStart(2,'0').toUpperCase();
+    },
+
+    oneditprepare: function() {
+      const savedAddr = this.address;
+      const savedCh   = this.channel;
+      $('#node-input-typeId').prop('readonly', true).css('background', '#f0f0f0');
+
+      function populateDropdown(bridgeId) {
+        if (!bridgeId) return;
+        $.getJSON('velbus/scan-results?bridge=' + bridgeId, function(results) {
+          const modules = (results && results.modules) ? results.modules : [];
+          const $addr = $('#node-input-address');
+          $addr.empty().append($('<option>').val('').text('— select address —'));
+
+          const typeIds = Object.keys(BLIND_TYPES).map(k => parseInt(k));
+          const filtered = modules.filter(m => typeIds.includes(parseInt(m.typeId, 16)));
+
+          if (!filtered.length) {
+            $addr.append($('<option>').val('').text('No blind modules found on bus'));
+            return;
+          }
+          filtered.forEach(function(m) {
+            const tid   = parseInt(m.typeId, 16);
+            const label = m.address + ' — ' + m.module;
+            const $opt  = $('<option>').val(m.addressDec).text(label).data('typeid', tid);
+            if (m.addressDec === parseInt(savedAddr)) $opt.attr('selected', true);
+            $addr.append($opt);
+          });
+        });
+      }
+
+      function updateChannelSelect(typeId) {
+        const t = BLIND_TYPES[typeId];
+        const $ch = $('#node-input-channel');
+        $ch.empty();
+        if (t) {
+          for (let i = 1; i <= t.channels; i++) {
+            $ch.append($('<option>').val(i).text('Channel ' + i));
+          }
+          $ch.val(savedCh || 1);
+          $('#node-input-typeId').val('0x' + typeId.toString(16).padStart(2,'0').toUpperCase());
+          $('#blind-type-hint').text(t.name + ' · ' + t.channels + ' channel' + (t.channels > 1 ? 's' : '')).show();
+        }
+      }
+
+      $('#node-input-bridge').on('change', function() { populateDropdown($(this).val()); });
+      $('#node-input-address').on('change', function() {
+        const tid = $(this).find(':selected').data('typeid');
+        if (tid) updateChannelSelect(tid);
+      });
+      // Deferred load — TypedInput sets value async after oneditprepare
+
+      $('#node-input-bridge').trigger('change');
+
+      setTimeout(function() { $('#node-input-bridge').trigger('change'); }, 150);
+    },
+
+    oneditsave: function() {
+      this.address = parseInt($('#node-input-address').val()) || 0;
+      this.channel = parseInt($('#node-input-channel').val()) || 1;
+      const tid = $('#node-input-typeId').val();
+      this.typeId = tid || '';
+      if (tid) {
+        const t = BLIND_TYPES[parseInt(tid, 16)];
+        if (t) this.moduleName = t.name;
+      }
+    },
+  });
+
+})();
+</script>
+
+<script type="text/html" data-template-name="velbus-blind">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Optional label">
+  </div>
+  <div class="form-row">
+    <label for="node-input-bridge"><i class="fa fa-plug"></i> Bridge</label>
+    <input type="text" id="node-input-bridge">
+  </div>
+  <div class="form-row">
+    <label for="node-input-address"><i class="fa fa-map-marker"></i> Address</label>
+    <select id="node-input-address" style="width:70%">
+      <option value="">— select bridge first —</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label for="node-input-channel"><i class="fa fa-arrows-v"></i> Channel</label>
+    <select id="node-input-channel" style="width:70%">
+      <option value="1">Channel 1</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label></label>
+    <span id="blind-type-hint" style="color:#888; font-size:0.9em; display:none;"></span>
+  </div>
+  <div class="form-row" style="display:none">
+    <input type="text" id="node-input-typeId">
+    <input type="text" id="node-input-moduleName">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="velbus-blind">
+    <p style="background:#fff3cd; border-left:4px solid #ffc107; padding:8px 12px; margin-bottom:12px; font-size:0.85em;">
+    <strong>&#9888; Testing status:</strong> This node was generated with Claude.ai and is in
+    need of extensive field testing before being deployed into a commercial project.
+    It is presented "as is" &mdash; any use beyond testing is entirely at your own risk and liability.
+    Constructive feedback is welcomed, accompanied by as many examples and debug captures as possible.
+    <a href="https://github.com/MDARltd/node-red-contrib-velbus-2026/issues" target="_blank">File an issue on GitHub</a>.
+    </p>
+  <p>Blind/shutter motor controller for original series — VMB1BL (0x03), VMB2BL (0x09).</p>
+  <p>For VMB1BLS/VMB2BLE with position control use <strong>velbus-blind-s</strong>.</p>
+
+  <h3>Output — Blind events and status</h3>
+  <p>Relay/button event (0x00):</p>
+  <pre>{ "type": "blind_event", "channel": 1,
+  "events": [{ "channel": 1, "event": "relay_up_on" }] }</pre>
+  <p>Event types: relay_up_on, relay_up_off, relay_down_on, relay_down_off,
+  btn_up_pressed, btn_up_released, btn_up_long, btn_down_pressed, btn_down_released, btn_down_long.</p>
+
+  <p>Blind status (0xEC):</p>
+  <pre>{ "type": "blind_status", "channel": 1, "on": true, "status": "up",
+  "timeoutSetting": "1min", "delayRemaining": 42,
+  "led": { "upOn": true, "downOn": false, ... } }</pre>
+
+  <h3>Input commands</h3>
+  <dl>
+    <dt><code>{ "cmd": "stop" }</code></dt><dd>Stop blind movement.</dd>
+    <dt><code>{ "cmd": "up", "timeout": 0 }</code></dt><dd>Move up. timeout=0 uses dip switch setting. timeout=0xFFFFFF = permanent.</dd>
+    <dt><code>{ "cmd": "down", "timeout": 0 }</code></dt><dd>Move down.</dd>
+    <dt><code>{ "cmd": "get_status" }</code></dt><dd>Request blind status.</dd>
+    <dt><code>{ "cmd": "get_name" }</code></dt><dd>Request blind name from VelbusLink.</dd>
+  </dl>
+</script>

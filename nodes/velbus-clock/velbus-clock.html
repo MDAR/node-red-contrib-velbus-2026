@@ -1,0 +1,191 @@
+<script type="text/javascript">
+(function() {
+
+  RED.nodes.registerType('velbus-clock', {
+    category:  'Velbus (outputs)',
+    color:     '#4A90D9',
+    defaults: {
+      name:            { value: '' },
+      bridge:          { value: '', type: 'velbus-bridge', required: true },
+      autoBroadcast:   { value: false },
+      intervalMinutes: { value: 60, validate: function(v) { return parseInt(v) > 0; } },
+      includeDate:     { value: true },
+      includeDst:      { value: true },
+    },
+    inputs:  1,
+    outputs: 1,
+    outputLabels: ['broadcast sent'],
+    icon:    'font-awesome/fa-clock-o',
+    paletteLabel: 'clock',
+
+    label: function() {
+      return this.name || (this.autoBroadcast
+        ? 'clock (auto, ' + this.intervalMinutes + 'm)'
+        : 'clock (manual)');
+    },
+
+    oneditprepare: function() {
+      function toggleIntervalRow() {
+        $('#clock-interval-row').toggle($('#node-input-autoBroadcast').is(':checked'));
+      }
+      $('#node-input-autoBroadcast').on('change', toggleIntervalRow);
+      toggleIntervalRow();
+    },
+  });
+
+})();
+</script>
+
+<script type="text/html" data-template-name="velbus-clock">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Optional label">
+  </div>
+  <div class="form-row">
+    <label for="node-input-bridge"><i class="fa fa-plug"></i> Bridge</label>
+    <input type="text" id="node-input-bridge">
+  </div>
+  <div class="form-row">
+    <label for="node-input-autoBroadcast"><i class="fa fa-refresh"></i> Auto-broadcast</label>
+    <input type="checkbox" id="node-input-autoBroadcast" style="width:auto; vertical-align:middle;">
+    <span style="color:#888; font-size:0.9em;">send automatically on an interval</span>
+  </div>
+  <div class="form-row" id="clock-interval-row">
+    <label for="node-input-intervalMinutes"><i class="fa fa-hourglass-half"></i> Interval (min)</label>
+    <input type="number" id="node-input-intervalMinutes" min="1" style="width:80px">
+  </div>
+  <div class="form-row">
+    <label for="node-input-includeDate"><i class="fa fa-calendar"></i> Include date</label>
+    <input type="checkbox" id="node-input-includeDate" style="width:auto; vertical-align:middle;">
+    <span style="color:#888; font-size:0.9em;">also send 0xB7 (day/month/year)</span>
+  </div>
+  <div class="form-row">
+    <label for="node-input-includeDst"><i class="fa fa-sun-o"></i> Include DST flag</label>
+    <input type="checkbox" id="node-input-includeDst" style="width:auto; vertical-align:middle;">
+    <span style="color:#888; font-size:0.9em;">also send 0xAF (daylight saving on/off)</span>
+  </div>
+  <div class="form-tips" style="margin-top:8px">
+    Broadcasts to bus address <code>0x00</code> — every RTC-equipped module on
+    the bus receives this and updates its own clock. Uses the Node-RED host's
+    own system clock and timezone, so make sure that's set correctly
+    (e.g. <code>timedatectl set-timezone Europe/London</code>).
+  </div>
+</script>
+
+<script type="text/html" data-help-name="velbus-clock">
+  <p>
+    Broadcasts system time, date, and daylight-saving state to the bus broadcast
+    address <code>0x00</code>. Every RTC-equipped Velbus module (relays, dimmers,
+    glass panels with clock features, etc.) receives and updates its own real-time
+    clock from this — this is what a physical Signum master clock module normally
+    does. Use this node if you don't have one fitted, or want Node-RED to be the
+    time source instead.
+  </p>
+
+  <h3>Commands sent</h3>
+  <ul>
+    <li><code>0xD8</code> Set real time clock — day of week, hour, minute</li>
+    <li><code>0xB7</code> Set date — day, month, year (only if "Include date" is on)</li>
+    <li><code>0xAF</code> Set daylight savings — on/off flag (only if "Include DST flag" is on)</li>
+  </ul>
+  <p>
+    All three are sent to address <code>0x00</code> at low priority, matching every
+    module protocol PDF checked. <b>Never</b> configure <code>0x00</code> as a real
+    module's own address — it is reserved for bus-wide broadcast.
+  </p>
+
+  <h3>DST detection</h3>
+  <p>
+    The daylight-saving flag is worked out from the Node-RED host's own configured
+    timezone (comparing the current UTC offset against the year's Jan 1 / Jul 1
+    offsets) — correct for UK/EU/US-style single-transition DST, but only as
+    accurate as the host's own clock and <code>TZ</code> setting. Override it
+    manually with <code>msg.payload.dst</code> (see below) if needed.
+  </p>
+
+  <h3>Input — Commands</h3>
+  <pre>
+{}                                              // bare inject — broadcast time (+date/DST per config), using now
+{ "cmd": "broadcast" }
+{ "cmd": "broadcast", "date": "2026-07-06T14:32:00" }   // override the time sent (testing)
+{ "cmd": "broadcast", "dst": true }             // override the DST flag sent
+{ "cmd": "broadcast_time" }                     // 0xD8 only, ignores config toggles
+{ "cmd": "broadcast_date" }                     // 0xB7 only
+{ "cmd": "broadcast_dst" }                      // 0xAF only, auto-detected
+{ "cmd": "broadcast_dst", "dst": false }        // 0xAF only, forced value
+{ "cmd": "set_alarm", "alarm": 1, "wakeHour": 7, "wakeMinute": 15, "bedHour": 22, "bedMinute": 30 }
+{ "cmd": "set_alarm", "alarm": 2, "wakeHour": 6, "wakeMinute": 45, "bedHour": 23, "bedMinute": 0, "address": "0x30" }
+{ "cmd": "set_alarm", "alarm": 1, "enabled": false }   // disable, address omitted = global
+  </pre>
+
+  <h3>Output</h3>
+  <pre>
+{
+  "topic":     "clock_broadcast",
+  "dayOfWeek": 1,              // 0=Monday...6=Sunday (Velbus convention, not JS)
+  "hours":     14,
+  "minutes":   32,
+  "date":      { "day": 6, "month": 7, "year": 2026 },  // null if date not included
+  "dst":       false,           // null if DST flag not included
+  "timestamp": 1783348320000
+}
+  </pre>
+  <p>
+    Only emitted for <code>"cmd": "broadcast"</code> / bare inject. The single-purpose
+    commands (<code>broadcast_time</code> etc.) update the status text but don't emit
+    an output message.
+  </p>
+
+  <h3>Auto-broadcast</h3>
+  <p>
+    When enabled, sends automatically on the configured interval (first send
+    5 seconds after deploy, to give the bridge time to connect). Manual input
+    commands still work alongside this.
+  </p>
+
+  <h3>set_alarm — global or local clock alarm (0xC3)</h3>
+  <p>
+    Sets a wake/sleep alarm (alarm 1 or 2). Omit <code>address</code> for a
+    <b>global</b> alarm — every V2 module on the bus receives the same
+    wake/sleep schedule. Provide <code>address</code> (hex string or decimal)
+    for a <b>local</b> alarm on that one module only. The packet body is
+    identical either way — only the destination address differs, per the
+    protocol's own design.
+  </p>
+  <p>
+    <b>Note on scope:</b> this is the one command on this node that breaks
+    from the palette's usual "one node = one physical module" pattern — it
+    accepts a per-message address override instead of a fixed node config.
+    That's deliberate: 0xC3 is a shared V2 system command any module type can
+    receive (confirmed identical across relay-20, dimmer-20, and glass-panel-20
+    protocol PDFs), not a feature specific to one module type the way an RGBW
+    setting or thermostat setpoint is — so it lives here rather than being
+    duplicated across every V2 node type.
+  </p>
+  <pre>
+{ "cmd": "set_alarm", "alarm": 1, "wakeHour": 7, "wakeMinute": 15, "bedHour": 22, "bedMinute": 30 }
+// → global: every module gets this schedule
+
+{ "cmd": "set_alarm", "alarm": 2, "wakeHour": 6, "wakeMinute": 45, "bedHour": 23, "bedMinute": 0, "address": "0x30" }
+// → local: only module 0x30 gets this schedule
+
+{ "cmd": "set_alarm", "alarm": 1, "enabled": false }
+// → disable alarm 1 (global) — wakeHour/wakeMinute/bedHour/bedMinute default to 0 if omitted
+  </pre>
+  <p>Output:</p>
+  <pre>
+{
+  "topic":      "alarm_set",
+  "target":     "global",   // or "0x30" etc. for a local alarm
+  "alarm":      1,
+  "wakeHour":   7,
+  "wakeMinute": 15,
+  "bedHour":    22,
+  "bedMinute":  30,
+  "enabled":    true
+}
+  </pre>
+  <p><code>enabled</code> defaults to <code>true</code> if omitted. An invalid
+  <code>address</code> falls back to a global broadcast with a warning, rather
+  than silently failing.</p>
+</script>

@@ -1,0 +1,165 @@
+<script type="text/javascript">
+(function() {
+
+  const BUTTON_TYPES = {
+    0x01: { name: 'VMB8PB',    channels: 8, series: 'original' },
+    0x16: { name: 'VMB8PBU',   channels: 8, series: 'original' },
+    0x17: { name: 'VMB6PBN',   channels: 6, series: 'original' },
+    0x1C: { name: 'VMB4PB',    channels: 4, series: 'original' },
+    0x20: { name: 'VMB6PB-20', channels: 6, series: 'v2'       },
+  };
+
+  RED.nodes.registerType('velbus-button', {
+    category:  'Velbus (inputs)',
+    color:     '#3A8C8C',
+    defaults: {
+      name:         { value: '' },
+      bridge:       { value: '', type: 'velbus-bridge', required: true },
+      address:      { value: '', required: true, validate: function(v) { return /^(0x)?[0-9a-fA-F]{1,2}$/.test(v); } },
+      channelCount: { value: 8 },
+      moduleName:   { value: '' },
+      typeId:       { value: '' },
+    },
+    inputs:  0,
+    outputs: 1,
+    outputLabels: ['button events'],
+    icon:    'font-awesome/fa-hand-pointer-o',
+    paletteLabel: 'button',
+
+    label: function() {
+      return this.name || this.moduleName ||
+        ('BTN 0x' + (parseInt(this.address) || 0).toString(16).padStart(2, '0').toUpperCase());
+    },
+
+    oneditprepare: function() {
+      const savedAddr   = this.address;
+      const savedTypeId = this.typeId ? parseInt(this.typeId, 16) : null;
+
+      $('#node-input-typeId').prop('readonly', true).css('background', '#f0f0f0');
+
+      function populateDropdown(bridgeId) {
+        const $addr = $('#node-input-address');
+        if (!bridgeId) return;
+
+        $.getJSON('velbus/scan-results?bridge=' + bridgeId, function(results) {
+          const modules = (results && results.modules) ? results.modules : [];
+          if (!modules.length) return;
+
+          $addr.empty().append($('<option>').val('').text('— select address —'));
+
+          const btnTypeIds = Object.keys(BUTTON_TYPES).map(k => parseInt(k));
+          const btnModules = modules.filter(m => btnTypeIds.includes(parseInt(m.typeId, 16)));
+
+          if (!btnModules.length) {
+            $addr.append($('<option>').val('').text('No button modules found on bus'));
+            return;
+          }
+
+          btnModules.forEach(function(m) {
+            const tid   = parseInt(m.typeId, 16);
+            const label = m.address + ' — ' + m.module;
+            const $opt  = $('<option>').val(m.addressDec).text(label).data('typeid', tid);
+            if (m.addressDec === parseInt(savedAddr)) $opt.attr('selected', true);
+            $addr.append($opt);
+          });
+
+          if (savedAddr) updateHint(parseInt(savedAddr));
+        });
+      }
+
+      function updateHint(addrDec) {
+        const $opt = $('#node-input-address option[value="' + addrDec + '"]');
+        const tid  = $opt.data('typeid');
+        if (tid && BUTTON_TYPES[tid]) {
+          const t = BUTTON_TYPES[tid];
+          $('#btn-type-hint').text(t.name + ' — ' + t.channels + ' ch · ' + t.series).show();
+          $('#node-input-typeId').val('0x' + tid.toString(16).padStart(2,'0').toUpperCase());
+          const $ch = $('#node-input-channelCount');
+          if (!$ch.val() || $ch.data('auto')) $ch.val(t.channels).data('auto', true);
+        } else {
+          $('#btn-type-hint').hide();
+        }
+      }
+
+      $('#node-input-bridge').on('change', function() { populateDropdown($(this).val()); });
+      $('#node-input-address').on('change', function() { updateHint(parseInt($(this).val())); });
+      $('#node-input-channelCount').on('input', function() { $(this).data('auto', false); });
+
+      // Deferred load — TypedInput sets value async after oneditprepare
+
+
+      $('#node-input-bridge').trigger('change');
+
+
+      setTimeout(function() { $('#node-input-bridge').trigger('change'); }, 150);
+    },
+
+    oneditsave: function() {
+      this.address = parseInt($('#node-input-address').val()) || 0;
+      const tid = $('#node-input-typeId').val();
+      this.typeId = tid || '';
+      if (tid) {
+        const t = BUTTON_TYPES[parseInt(tid, 16)];
+        if (t) this.moduleName = t.name;
+      }
+    },
+  });
+
+})();
+</script>
+
+<script type="text/html" data-template-name="velbus-button">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Optional label">
+  </div>
+  <div class="form-row">
+    <label for="node-input-bridge"><i class="fa fa-plug"></i> Bridge</label>
+    <input type="text" id="node-input-bridge">
+  </div>
+  <div class="form-row">
+    <label for="node-input-address"><i class="fa fa-map-marker"></i> Address</label>
+    <select id="node-input-address" style="width:70%">
+      <option value="">— select bridge first —</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label></label>
+    <span id="btn-type-hint" style="color:#888; font-size:0.9em; display:none;"></span>
+  </div>
+  <div class="form-row" style="display:none">
+    <input type="text" id="node-input-typeId">
+    <input type="text" id="node-input-moduleName">
+  </div>
+  <div class="form-row">
+    <label for="node-input-channelCount"><i class="fa fa-list-ol"></i> Channels</label>
+    <input type="number" id="node-input-channelCount" min="1" max="32" style="width:80px">
+    <span style="margin-left:8px; color:#888; font-size:0.9em;">auto-filled from scan</span>
+  </div>
+</script>
+
+<script type="text/html" data-help-name="velbus-button">
+  <p>
+    Button and input module node for Velbus push-button panels — original and V2 series.
+    For glass panel modules (VMBEL, VMBGP) with thermostat use <strong>velbus-glass-panel</strong> instead.
+  </p>
+
+  <h3>Supported modules</h3>
+  <p>VMB8PB, VMB8PBU, VMB6PBN, VMB4PB (original series) · VMB6PB-20 (V2 series).</p>
+  <p>Also suitable for glass panel sub-addresses when button events need separate wiring.</p>
+
+  <h3>Output</h3>
+  <pre>{
+  "type":        "button",
+  "on":          true,
+  "pressed":     [1, 3],
+  "released":    [],
+  "longPressed": []
+}</pre>
+  <p>
+    <code>on</code> is <code>true</code> when any channel is pressed or long-pressed,
+    <code>false</code> when only releases are present.
+    Channel numbers are 1-indexed. All three arrays are always present —
+    empty arrays when no channels in that state.
+  </p>
+</script>

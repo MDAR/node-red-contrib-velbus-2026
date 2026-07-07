@@ -1,0 +1,147 @@
+<script type="text/javascript">
+(function() {
+
+  const SENSOR_TYPES = {
+    0x22: { name: 'VMB7IN',  hasCounter: true,  series: 'original' },
+    0x32: { name: 'VMB4AN',  hasCounter: false, series: 'original' },
+  };
+
+  RED.nodes.registerType('velbus-sensor', {
+    category:  'Velbus (inputs)',
+    color:     '#3A8C8C',
+    defaults: {
+      name:       { value: '' },
+      bridge:     { value: '', type: 'velbus-bridge', required: true },
+      address:    { value: '', required: true, validate: function(v) { return /^(0x)?[0-9a-fA-F]{1,2}$/.test(v); } },
+      moduleName: { value: '' },
+      typeId:     { value: '' },
+    },
+    inputs:  1,
+    outputs: 2,
+    outputLabels: ['channel events / status', 'counter data'],
+    icon:    'font-awesome/fa-tachometer',
+    paletteLabel: 'sensor',
+
+    label: function() {
+      const t = this.typeId ? SENSOR_TYPES[parseInt(this.typeId, 16)] : null;
+      const n = this.name || this.moduleName || (t ? t.name : 'sensor');
+      return n + ' 0x' + (parseInt(this.address) || 0).toString(16).padStart(2,'0').toUpperCase();
+    },
+
+    oneditprepare: function() {
+      const savedAddr = this.address;
+      $('#node-input-typeId').prop('readonly', true).css('background', '#f0f0f0');
+
+      function populateDropdown(bridgeId) {
+        if (!bridgeId) return;
+        $.getJSON('velbus/scan-results?bridge=' + bridgeId, function(results) {
+          const modules = (results && results.modules) ? results.modules : [];
+          const $addr = $('#node-input-address');
+          $addr.empty().append($('<option>').val('').text('— select address —'));
+
+          const typeIds = Object.keys(SENSOR_TYPES).map(k => parseInt(k));
+          const filtered = modules.filter(m => typeIds.includes(parseInt(m.typeId, 16)));
+
+          if (!filtered.length) {
+            $addr.append($('<option>').val('').text('No sensor modules found on bus'));
+            return;
+          }
+          filtered.forEach(function(m) {
+            const tid   = parseInt(m.typeId, 16);
+            const label = m.address + ' — ' + m.module;
+            const $opt  = $('<option>').val(m.addressDec).text(label).data('typeid', tid);
+            if (m.addressDec === parseInt(savedAddr)) $opt.attr('selected', true);
+            $addr.append($opt);
+          });
+        });
+      }
+
+      function updateHint(addrDec) {
+        const $opt = $('#node-input-address option[value="' + addrDec + '"]');
+        const tid  = $opt.data('typeid');
+        if (tid && SENSOR_TYPES[tid]) {
+          const t = SENSOR_TYPES[tid];
+          $('#sensor-type-hint').text(t.name + (t.hasCounter ? ' · pulse counter ch1-4' : '')).show();
+          $('#node-input-typeId').val('0x' + tid.toString(16).padStart(2,'0').toUpperCase());
+        } else {
+          $('#sensor-type-hint').hide();
+        }
+      }
+
+      $('#node-input-bridge').on('change', function() { populateDropdown($(this).val()); });
+      $('#node-input-address').on('change', function() { updateHint(parseInt($(this).val())); });
+      // Deferred load — TypedInput sets value async after oneditprepare
+
+      $('#node-input-bridge').trigger('change');
+
+      setTimeout(function() { $('#node-input-bridge').trigger('change'); }, 150);
+    },
+
+    oneditsave: function() {
+      this.address = parseInt($('#node-input-address').val()) || 0;
+      const tid = $('#node-input-typeId').val();
+      this.typeId = tid || '';
+      if (tid) {
+        const t = SENSOR_TYPES[parseInt(tid, 16)];
+        if (t) this.moduleName = t.name;
+      }
+    },
+  });
+
+})();
+</script>
+
+<script type="text/html" data-template-name="velbus-sensor">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Optional label">
+  </div>
+  <div class="form-row">
+    <label for="node-input-bridge"><i class="fa fa-plug"></i> Bridge</label>
+    <input type="text" id="node-input-bridge">
+  </div>
+  <div class="form-row">
+    <label for="node-input-address"><i class="fa fa-map-marker"></i> Address</label>
+    <select id="node-input-address" style="width:70%">
+      <option value="">— select bridge first —</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label></label>
+    <span id="sensor-type-hint" style="color:#888; font-size:0.9em; display:none;"></span>
+  </div>
+  <div class="form-row" style="display:none">
+    <input type="text" id="node-input-typeId">
+    <input type="text" id="node-input-moduleName">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="velbus-sensor">
+  <p>Universal input node for Velbus original series sensor/input modules.</p>
+  <p>Supported: VMB7IN (0x22), VMB4AN (0x32).</p>
+  <p>For V2 series use <strong>velbus-sensor-20</strong>.</p>
+
+  <h3>Output 1 — Channel events / status</h3>
+  <p>Channel event (0x00):</p>
+  <pre>{ "type": "channel", "on": true, "pressed": [1,3], "released": [], "longPressed": [] }</pre>
+  <p>Module status (0xED):</p>
+  <pre>{ "type": "status", "on": true, "channels": [1,3],
+  "enabled": [1,2,3,4,5,6,7,8], "locked": [], "progDisabled": [],
+  "program": "summer", "alarms": { "alarm1Active": false, "alarm2Active": false } }</pre>
+
+  <h3>Output 2 — Counter data (VMB7IN only)</h3>
+  <pre>{ "type": "counter", "channel": 1, "count": 12345,
+  "pulsesPerUnit": 1000, "periodMs": 3600, "overflow": false }</pre>
+  <p>Engineering units: calculate in flow using pulsesPerUnit and periodMs.</p>
+  <p>Power (W) = 3,600,000,000 / (periodMs × pulsesPerUnit)</p>
+
+  <h3>Input commands</h3>
+  <dl>
+    <dt><code>{ "cmd": "get_status" }</code></dt><dd>Request module status.</dd>
+    <dt><code>{ "cmd": "get_counter", "channels": 15, "interval": 30 }</code></dt>
+    <dd>Request counter (VMB7IN). channels=bitmask of ch1-4 (default 15=all). interval=0 no change.</dd>
+    <dt><code>{ "cmd": "reset_counter", "channel": 1 }</code></dt><dd>Reset pulse counter to zero.</dd>
+    <dt><code>{ "cmd": "load_counter", "channel": 1, "value": 12345 }</code></dt><dd>Load counter with preset value (build 1426+).</dd>
+    <dt><code>{ "cmd": "get_name", "channel": 1 }</code></dt><dd>Request channel name from VelbusLink.</dd>
+  </dl>
+</script>

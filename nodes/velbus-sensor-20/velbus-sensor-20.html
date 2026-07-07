@@ -1,0 +1,151 @@
+<script type="text/javascript">
+(function() {
+
+  const SENSOR_TYPES_20 = {
+    0x4E: { name: 'VMB8IN-20', hasCounter: true, series: 'v2' },
+  };
+
+  RED.nodes.registerType('velbus-sensor-20', {
+    category:  'Velbus (inputs)',
+    color:     '#3A8C8C',
+    defaults: {
+      name:       { value: '' },
+      bridge:     { value: '', type: 'velbus-bridge', required: true },
+      address:    { value: '', required: true, validate: function(v) { return /^(0x)?[0-9a-fA-F]{1,2}$/.test(v); } },
+      moduleName: { value: '' },
+      typeId:     { value: '' },
+    },
+    inputs:  1,
+    outputs: 2,
+    outputLabels: ['channel events / status', 'energy counter'],
+    icon:    'font-awesome/fa-tachometer',
+    paletteLabel: 'sensor-20',
+
+    label: function() {
+      const t = this.typeId ? SENSOR_TYPES_20[parseInt(this.typeId, 16)] : null;
+      const n = this.name || this.moduleName || (t ? t.name : 'sensor-20');
+      return n + ' 0x' + (parseInt(this.address) || 0).toString(16).padStart(2,'0').toUpperCase();
+    },
+
+    oneditprepare: function() {
+      const savedAddr = this.address;
+      $('#node-input-typeId').prop('readonly', true).css('background', '#f0f0f0');
+
+      function populateDropdown(bridgeId) {
+        if (!bridgeId) return;
+        $.getJSON('velbus/scan-results?bridge=' + bridgeId, function(results) {
+          const modules = (results && results.modules) ? results.modules : [];
+          const $addr = $('#node-input-address');
+          $addr.empty().append($('<option>').val('').text('— select address —'));
+
+          const typeIds = Object.keys(SENSOR_TYPES_20).map(k => parseInt(k));
+          const filtered = modules.filter(m => typeIds.includes(parseInt(m.typeId, 16)));
+
+          if (!filtered.length) {
+            $addr.append($('<option>').val('').text('No V2 sensor modules found on bus'));
+            return;
+          }
+          filtered.forEach(function(m) {
+            const tid   = parseInt(m.typeId, 16);
+            const label = m.address + ' — ' + m.module;
+            const $opt  = $('<option>').val(m.addressDec).text(label).data('typeid', tid);
+            if (m.addressDec === parseInt(savedAddr)) $opt.attr('selected', true);
+            $addr.append($opt);
+          });
+          if (savedAddr) {
+            const $opt = $('#node-input-address option[value="' + parseInt(savedAddr) + '"]');
+            const tid = $opt.data('typeid');
+            if (tid) {
+              $('#sensor20-type-hint').text(SENSOR_TYPES_20[tid].name + ' · up to 32ch · energy counters').show();
+              $('#node-input-typeId').val('0x' + tid.toString(16).padStart(2,'0').toUpperCase());
+            }
+          }
+        });
+      }
+
+      $('#node-input-bridge').on('change', function() { populateDropdown($(this).val()); });
+      $('#node-input-address').on('change', function() {
+        const tid = $(this).find(':selected').data('typeid');
+        if (tid && SENSOR_TYPES_20[tid]) {
+          $('#sensor20-type-hint').text(SENSOR_TYPES_20[tid].name + ' · up to 32ch · energy counters').show();
+          $('#node-input-typeId').val('0x' + tid.toString(16).padStart(2,'0').toUpperCase());
+        }
+      });
+      // Deferred load — TypedInput sets value async after oneditprepare
+
+      $('#node-input-bridge').trigger('change');
+
+      setTimeout(function() { $('#node-input-bridge').trigger('change'); }, 150);
+    },
+
+    oneditsave: function() {
+      this.address = parseInt($('#node-input-address').val()) || 0;
+      const tid = $('#node-input-typeId').val();
+      this.typeId = tid || '';
+      if (tid) {
+        const t = SENSOR_TYPES_20[parseInt(tid, 16)];
+        if (t) this.moduleName = t.name;
+      }
+    },
+  });
+
+})();
+</script>
+
+<script type="text/html" data-template-name="velbus-sensor-20">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Optional label">
+  </div>
+  <div class="form-row">
+    <label for="node-input-bridge"><i class="fa fa-plug"></i> Bridge</label>
+    <input type="text" id="node-input-bridge">
+  </div>
+  <div class="form-row">
+    <label for="node-input-address"><i class="fa fa-map-marker"></i> Address</label>
+    <select id="node-input-address" style="width:70%">
+      <option value="">— select bridge first —</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label></label>
+    <span id="sensor20-type-hint" style="color:#888; font-size:0.9em; display:none;"></span>
+  </div>
+  <div class="form-row" style="display:none">
+    <input type="text" id="node-input-typeId">
+    <input type="text" id="node-input-moduleName">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="velbus-sensor-20">
+  <p>V2 universal input node for VMB8IN-20 (0x4E).</p>
+  <p>Supports up to 32 digital input channels (8 primary + 24 via subaddresses),
+  8 energy counters, firmware check on startup, and name auto-retrieval.</p>
+  <p>For original series use <strong>velbus-sensor</strong>.</p>
+
+  <h3>Output 1 — Channel events / status</h3>
+  <p>Channel event (0x00) — includes sourceAddress to identify primary vs subaddress:</p>
+  <pre>{ "type": "channel", "on": true, "pressed": [1,3], "released": [],
+  "longPressed": [], "sourceAddress": "0x0A" }</pre>
+  <p>Primary module status (0xED — 8 bytes):</p>
+  <pre>{ "type": "status", "on": true, "channels": [1,2],
+  "enabled": [1,2,3,4,5,6,7,8], "normal": [1,2,3,4,5,6,7,8],
+  "locked": [], "progDisabled": [], "program": "group1",
+  "autoSendInterval": 30 }</pre>
+  <p>Subaddress status (0xED — 5 bytes):</p>
+  <pre>{ "type": "sub_status", "channels": [1,3], "enabled": [...], "locked": [], "progDisabled": [] }</pre>
+
+  <h3>Output 2 — Energy counter (0xA4)</h3>
+  <pre>{ "type": "energy", "channel": 1, "powerW": 1250, "energyWh": 45678 }</pre>
+
+  <h3>Input commands</h3>
+  <dl>
+    <dt><code>{ "cmd": "get_status" }</code></dt><dd>Request module status.</dd>
+    <dt><code>{ "cmd": "get_counter", "channels": 255, "interval": 30 }</code></dt>
+    <dd>Request energy counters. channels=bitmask of ch1-8 (255=all). interval=0 no change.</dd>
+    <dt><code>{ "cmd": "load_counter", "channel": 1, "value": 0 }</code></dt><dd>Load counter with preset value.</dd>
+    <dt><code>{ "cmd": "lock", "channel": 1, "duration": 3600 }</code></dt><dd>Lock channel by number (1-32, 255=all).</dd>
+    <dt><code>{ "cmd": "unlock", "channel": 1 }</code></dt><dd>Unlock channel.</dd>
+    <dt><code>{ "cmd": "get_name", "channel": 1 }</code></dt><dd>Request channel name (1-32, 255=all).</dd>
+  </dl>
+</script>

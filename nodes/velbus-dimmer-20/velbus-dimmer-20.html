@@ -1,0 +1,271 @@
+<script type="text/javascript">
+
+  // ── Shared address dropdown helper ──────────────────────────────────────────
+  function velbusPopulateAddressDropdown(nodeCtx, bridgeSelector, addrSelector, nodeTypes) {
+    var addrField  = $(addrSelector);
+    var currentVal = String(addrField.val() || nodeCtx.address || nodeCtx.moduleAddr || '').replace('0x','').toUpperCase();
+
+    function buildDropdown(modules) {
+      var filtered = nodeTypes
+        ? modules.filter(function(m) { return nodeTypes.indexOf(m.suggestedNode) !== -1; })
+        : modules;
+
+      if (filtered.length === 0) {
+        addrField.show();
+        return;
+      }
+
+      var select = $('<select>', { id: addrSelector.replace('#',''), style: 'width:100%' });
+      select.append($('<option>', { value: '', text: '\u2014 select or type address \u2014' }));
+
+      filtered.forEach(function(m) {
+        var addrHex = m.address.replace('0x','').toUpperCase();
+        var label = m.address + '  ' + m.module +
+          (m.velbusName && m.velbusName !== m.module ? '  "' + m.velbusName + '"' : '') +
+          '  (build ' + m.build + ', map v' + m.memoryMapVersion + ')';
+        var opt = $('<option>', { value: addrHex, text: label });
+        if (addrHex === currentVal) opt.prop('selected', true);
+        select.append(opt);
+        opt.data('module', m);
+      });
+
+      select.append($('<option>', { value: '__manual__', text: '\u2014 enter address manually \u2014' }));
+      addrField.replaceWith(select);
+
+      select.on('change', function() {
+        if ($(this).val() === '__manual__') {
+          var input = $('<input>', {
+            type: 'text', id: addrSelector.replace('#',''),
+            placeholder: 'hex e.g. A0', style: 'width:80px'
+          });
+          $(this).replaceWith(input);
+          return;
+        }
+        var m = $(this).find(':selected').data('module');
+        if (m && m.channels) {
+          var cc = $('#node-input-channelCount');
+          if (cc.length) cc.val(m.channels);
+        }
+      });
+    }
+
+    function loadResults() {
+      var bridgeId = $(bridgeSelector).val();
+      if (!bridgeId) return;
+      $.getJSON('velbus/scan-results?bridge=' + bridgeId, function(data) {
+        if (data && data.modules && data.modules.length > 0) buildDropdown(data.modules);
+      }).fail(function() {});
+    }
+
+    $(bridgeSelector).on('change', loadResults);
+    setTimeout(function() { $(bridgeSelector).trigger('change'); }, 150);
+  }
+
+  RED.nodes.registerType('velbus-dimmer-20', {
+    category: 'Velbus (outputs)',
+    color:    '#4A90D9',
+    defaults: {
+      name:         { value: '' },
+      bridge:       { value: '', type: 'velbus-bridge', required: true },
+      moduleAddr:   { value: '', required: true },
+      startChannel: { value: 1,  required: true, validate: RED.validators.number() },
+      channelCount: { value: 4,  required: true, validate: RED.validators.number() },
+      ledMode:      { value: 'single' }
+    },
+    inputs:  1,
+    outputs: 2,
+    icon:    'font-awesome/fa-sliders',
+    label: function() {
+      if (this.name) return this.name;
+      return 'dimmer-20 0x' + (this.moduleAddr || '??');
+    },
+    outputLabels: ['state / events', 'warnings'],
+    oneditprepare: function() {
+      velbusPopulateAddressDropdown(
+        this,
+        '#node-input-bridge',
+        '#node-input-moduleAddr',
+        ['velbus-dimmer-20']
+      );
+    }
+  });
+</script>
+
+<script type="text/html" data-template-name="velbus-dimmer-20">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name override</label>
+    <input type="text" id="node-input-name"
+      placeholder="Leave blank to use module name from VelbusLink">
+  </div>
+  <div class="form-row">
+    <label for="node-input-bridge"><i class="fa fa-server"></i> Bridge</label>
+    <input type="text" id="node-input-bridge">
+  </div>
+  <div class="form-row">
+    <label for="node-input-moduleAddr"><i class="fa fa-microchip"></i> Address</label>
+    <input type="text" id="node-input-moduleAddr" placeholder="e.g. A5 — run scan first for dropdown" style="width:100%">
+    <div class="form-tips" style="margin-top:4px">Run a <b>velbus-scan</b> node first to populate the dropdown with discovered modules.</div>
+  </div>
+  <div class="form-row">
+    <label for="node-input-startChannel"><i class="fa fa-list-ol"></i> Start channel</label>
+    <input type="number" id="node-input-startChannel" min="1" max="8" style="width:60px">
+  </div>
+  <div class="form-row">
+    <label for="node-input-channelCount"><i class="fa fa-hashtag"></i> Channel count</label>
+    <input type="number" id="node-input-channelCount" min="1" max="8" style="width:60px">
+  </div>
+  <div class="form-row" id="ledmode-row">
+    <label for="node-input-ledMode"><i class="fa fa-adjust"></i> LED grouping mode</label>
+    <select id="node-input-ledMode" style="width:auto">
+      <option value="single">4 &times; single-colour (independent channels)</option>
+      <option value="rgb">1 &times; RGB + 1 &times; single (CH1-3 colour, CH4 independent)</option>
+      <option value="rgbw">1 &times; RGBW (all four channels, colour mixing)</option>
+    </select>
+    <div class="form-tips" style="margin-top:4px">
+      <b>VMB4LEDPWM-20 only.</b> Must match the physical wiring.
+      Confirm with installer before commissioning &mdash; wrong mode causes silent errors.
+      Unsure what's actually set on the module? Send <code>{ "channel": 1, "cmd": "get_device_type" }</code>
+      to read it back &mdash; this node will warn you here if the reading disagrees with this setting.
+    </div>
+  </div>
+</script>
+
+<script type="text/javascript">
+  // Show ledMode selector only when the configured module is VMB4LEDPWM-20
+  // We can't know the type until scan, so show it by default and add a note.
+  // A future enhancement could hide it for known non-LEDPWM addresses.
+  (function() {
+    var orig = RED.nodes.getType('velbus-dimmer-20');
+    if (orig && orig.prototype && orig.prototype.oneditprepare) {
+      var _prev = orig.prototype.oneditprepare;
+      orig.prototype.oneditprepare = function() {
+        _prev.call(this);
+        // ledMode row always visible — commissioning agent uses it
+      };
+    }
+  })();
+</script>
+
+<script type="text/html" data-help-name="velbus-dimmer-20">
+    <p style="background:#fff3cd; border-left:4px solid #ffc107; padding:8px 12px; margin-bottom:12px; font-size:0.85em;">
+    <strong>&#9888; Testing status:</strong> This node was generated with Claude.ai and is in
+    need of extensive field testing before being deployed into a commercial project.
+    It is presented "as is" &mdash; any use beyond testing is entirely at your own risk and liability.
+    Constructive feedback is welcomed, accompanied by as many examples and debug captures as possible.
+    <a href="https://github.com/MDARltd/node-red-contrib-velbus-2026/issues" target="_blank">File an issue on GitHub</a>.
+    </p>
+  <p><strong>V2.0 series only (-20 suffix modules)</strong></p>
+  <p>For original series dimmers (VMBDMI, VMBDMI-R, VMB4DC) use the <b>velbus-dimmer</b> node instead.</p>
+
+  <p>Supports: <b>VMB2DC-20</b> (2ch, 0-10V), <b>VMB8DC-20</b> (8ch, 0-10V),
+  <b>VMB4LEDPWM-20</b> (4ch, PWM LED)</p>
+
+  <p>VMB2DC-20 and VMB8DC-20 output a 0-10V control voltage — they do not carry
+  mains load. They drive third-party dimmer packs, actuators, or any 0-10V compatible device.</p>
+
+  <h3>Address dropdown</h3>
+  <p>Run a <b>velbus-scan</b> node first to populate the address dropdown.</p>
+
+  <h3>Output 1 — State / Events</h3>
+  <pre>
+{
+  "topic":      "dimmer_status",
+  "address":    "0xA5",
+  "module":     "GF Lights",
+  "outputType": "0-10V",
+  "dimCurve":   "linear",
+  "channel":    1,
+  "state":      "on",
+  "on":         true,
+  "level":      187,
+  "percent":    73.6,
+  "inhibited":  false,
+  "forcedOn":   false,
+  "forcedOff":  false,
+  "timestamp":  1719100000000
+}
+  </pre>
+
+  <h3>VMB4LEDPWM-20 output grouping modes</h3>
+  <p>The four PWM channels can be grouped in three ways. This must match the physical wiring
+  and must be set before sending any colour commands.</p>
+  <ul>
+    <li><b>4 &times; single-colour</b> &mdash; four independent channels. Use <code>cmd: "set"</code> per channel.
+    Suitable for four separate LED circuits of any colour.</li>
+    <li><b>1 &times; RGB + 1 &times; single</b> &mdash; CH1=Red, CH2=Green, CH3=Blue form one RGB group; CH4 is independent.
+    Use <code>cmd: "rgbw"</code> for colour mixing; <code>cmd: "set"</code> for CH4.</li>
+    <li><b>1 &times; RGBW</b> &mdash; all four channels form one RGBW group (CH1=R, CH2=G, CH3=B, CH4=W).
+    Use <code>cmd: "rgbw"</code> for all colour control.</li>
+  </ul>
+  <p>The grouping mode is the emergent result of each channel's <b>Device Type</b> setting
+  (settings index 25): channel&nbsp;1 = <code>0x08</code> means RGBW, channel&nbsp;1 = <code>0xF0</code>
+  means RGB, any single-lamp type means independent. Use <code>cmd: "get_device_type"</code> below to
+  read this back from the module and confirm it matches this config setting &mdash; this node config
+  property documents which mode should be active but does <em>not</em> write to the module automatically.
+  Writing the mode is a deliberate commissioning-time decision, made by the installer or the VelbusAI
+  commissioning agent.</p>
+
+  <h3>Input — Commands</h3>
+  <pre>
+{ "channel": 1,     "cmd": "set",     "percent": 75 }
+{ "channel": 1,     "cmd": "set",     "level": 191, "fadeMode": 0 }
+{ "channel": 1,     "cmd": "on" }
+{ "channel": 1,     "cmd": "off" }
+{ "channel": 1,     "cmd": "restore" }
+{ "channel": 1,     "cmd": "timer",   "duration": 60 }
+{ "channel": 1,     "cmd": "scene",   "scene": 0 }
+{ "channel": "all", "cmd": "off" }
+{ "channel": 1,     "cmd": "forced_on",    "duration": -1 }
+{ "channel": 1,     "cmd": "forced_off",   "duration": 3600 }
+{ "channel": 1,     "cmd": "cancel_forced_on" }
+{ "channel": 1,     "cmd": "cancel_forced_off" }
+{ "channel": 1,     "cmd": "inhibit",      "duration": 1800 }
+{ "channel": 1,     "cmd": "cancel_inhibit" }
+{ "channel": 1,     "cmd": "status" }
+{ "channel": 1,     "cmd": "get_device_type" }
+{ "channel": "all", "cmd": "get_device_type" }
+  </pre>
+  <p>fadeMode: 0=direct, 1=rate, 2=time. Duration in seconds, -1=permanent.</p>
+
+  <h3>RGBW command &mdash; VMB4LEDPWM-20 (rgb / rgbw mode only)</h3>
+  <pre>
+{ "cmd": "rgbw", "r": 254, "g": 127, "b": 0,   "w": 0,   "fadeMode": 0 }
+{ "cmd": "rgbw", "r": 0,   "g": 0,   "b": 0,   "w": 254, "fadeMode": 1 }
+{ "cmd": "rgbw", "r": 254, "g": 254, "b": 254, "w": 254, "group": 0xFF }
+  </pre>
+  <p>R, G, B, W values: 0&ndash;254 raw. <code>group</code>: 0xFF = all groups (default).
+  Node will warn and reject the command if <b>LED grouping mode</b> is set to
+  <em>4 &times; single-colour</em>.</p>
+
+  <p>Output 1 also emits <code>ledMode</code> in the <code>module_online</code> payload
+  (<code>"single"</code>, <code>"rgb"</code>, or <code>"rgbw"</code>) so downstream flows
+  can adapt their command set automatically.</p>
+
+  <h3>get_device_type &mdash; VMB4LEDPWM-20 grouping mode verification (read-only)</h3>
+  <p>Reads the actual Device Type setting from the module via the settings API (0xE7/0xE8) &mdash;
+  never writes. Useful to confirm the physical wiring matches this node's configured
+  <b>LED grouping mode</b> before commissioning colour control.</p>
+  <pre>
+// Output 1
+{
+  "topic":             "device_type",
+  "address":           "0x06",
+  "module":             "Feature Wall",
+  "channel":            1,
+  "settingIndex":       25,
+  "deviceType":         "0x08",
+  "deviceTypeName":     "RGBW control (consumes all 4 channels)",
+  "detectedGroupMode":  "rgbw"
+}
+
+// Output 2 — only if channel 1 reading disagrees with the configured ledMode
+{
+  "topic":              "ledmode_mismatch",
+  "address":            "0x06",
+  "module":             "Feature Wall",
+  "configuredLedMode":  "single",
+  "detectedGroupMode":  "rgbw",
+  "message":            "Node config ledMode (\"single\") does not match Feature Wall (0x06)\u2019s actual Device Type setting (\"rgbw\"). Update the node config to match, or re-check the physical wiring."
+}
+  </pre>
+</script>

@@ -1,0 +1,72 @@
+<script type="text/javascript">
+  RED.nodes.registerType('velbus-bridge', {
+    category: 'config',
+    defaults: {
+      name:     { value: 'Velbus Bridge' },
+      host:     { value: '127.0.0.1', required: true },
+      port:     { value: '6000',      required: true, validate: RED.validators.number() },
+      useTLS:   { value: false },
+      useAuth:  { value: false },
+      authKey:  { value: '' },
+      certPath: { value: '' },
+      keyPath:  { value: '' }
+    },
+    label: function() {
+      return this.name || (this.host + ':' + this.port);
+    }
+  });
+</script>
+
+<script type="text/html" data-template-name="velbus-bridge">
+  <div class="form-row">
+    <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-config-input-name" placeholder="Velbus Bridge">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-host"><i class="fa fa-server"></i> Host</label>
+    <input type="text" id="node-config-input-host" placeholder="127.0.0.1">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-port"><i class="fa fa-plug"></i> Port</label>
+    <input type="number" id="node-config-input-port" placeholder="6000">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-useTLS"><i class="fa fa-lock"></i> TLS</label>
+    <input type="checkbox" id="node-config-input-useTLS" style="display:inline-block;width:auto;vertical-align:top;">
+    &nbsp;Enable TLS (python-velbustcp)
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-useAuth"><i class="fa fa-key"></i> Auth</label>
+    <input type="checkbox" id="node-config-input-useAuth" style="display:inline-block;width:auto;vertical-align:top;">
+    &nbsp;Send auth key on connect
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-authKey"><i class="fa fa-key"></i> Auth Key</label>
+    <input type="password" id="node-config-input-authKey" placeholder="Auth key for python-velbustcp">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-certPath"><i class="fa fa-certificate"></i> Cert path</label>
+    <input type="text" id="node-config-input-certPath" placeholder="/path/to/ca.crt">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-keyPath"><i class="fa fa-file"></i> Key path</label>
+    <input type="text" id="node-config-input-keyPath" placeholder="/path/to/client.key">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="velbus-bridge">
+    <p style="background:#fff3cd; border-left:4px solid #ffc107; padding:8px 12px; margin-bottom:12px; font-size:0.85em;">
+    <strong>&#9888; Testing status:</strong> This node was generated with Claude.ai and is in
+    need of extensive field testing before being deployed into a commercial project.
+    It is presented "as is" &mdash; any use beyond testing is entirely at your own risk and liability.
+    Constructive feedback is welcomed, accompanied by as many examples and debug captures as possible.
+    <a href="https://github.com/MDARltd/node-red-contrib-velbus-2026/issues" target="_blank">File an issue on GitHub</a>.
+    </p>
+  <p>Configuration node. Manages a single persistent TCP connection to a Velbus gateway
+  (velbus-tcp snap on port 6000, or python-velbustcp on port 27015).</p>
+  <p>All <b>velbus-relay</b> nodes sharing this bridge use the same connection.
+  The bridge auto-reconnects if the connection is lost.</p>
+  <h3>TLS / Auth</h3>
+  <p>Enable <b>TLS</b> and <b>Auth</b> for python-velbustcp connections.
+  The auth key is sent as plain text immediately after the TCP handshake, followed by a newline.</p>
+</script>

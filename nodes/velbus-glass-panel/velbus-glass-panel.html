@@ -1,0 +1,337 @@
+<script type="text/javascript">
+(function() {
+
+  // ── Glass panel type list for info display ───────────────────────────────
+  const GLASS_PANEL_TYPES = {
+    0x1E: { name: 'VMBGP1',       channels:  1, oled: false, pir: false, series: 'original' },
+    0x1F: { name: 'VMBGP2',       channels:  2, oled: false, pir: false, series: 'original' },
+    0x21: { name: 'VMBGPO',       channels: 32, oled: true,  pir: false, series: 'original' },
+    0x2D: { name: 'VMBGP4PIR',    channels:  8, oled: false, pir: true,  series: 'original' },
+    0x34: { name: 'VMBEL1',       channels:  1, oled: false, pir: false, series: 'original' },
+    0x35: { name: 'VMBEL2',       channels:  2, oled: false, pir: false, series: 'original' },
+    0x36: { name: 'VMBEL4',       channels:  4, oled: false, pir: false, series: 'original' },
+    0x37: { name: 'VMBELO',       channels:  4, oled: true,  pir: false, series: 'original' },
+    0x38: { name: 'VMBELPIR',     channels:  8, oled: false, pir: true,  series: 'original' },
+    0x3A: { name: 'VMBGP1-2',     channels:  1, oled: false, pir: false, series: 'original' },
+    0x3B: { name: 'VMBGP2-2',     channels:  2, oled: false, pir: false, series: 'original' },
+    0x3C: { name: 'VMBGP4-2',     channels:  4, oled: false, pir: false, series: 'original' },
+    0x3D: { name: 'VMBGPOD-2',    channels:  4, oled: true,  pir: false, series: 'original' },
+    0x47: { name: 'VMBEL2PIR',    channels:  6, oled: false, pir: true,  series: 'original' },
+    0x4F: { name: 'VMBEL1-20',    channels:  1, oled: false, pir: false, series: 'v2' },
+    0x50: { name: 'VMBEL2-20',    channels:  2, oled: false, pir: false, series: 'v2' },
+    0x51: { name: 'VMBEL4-20',    channels:  4, oled: false, pir: false, series: 'v2' },
+    0x52: { name: 'VMBELO-20',    channels:  4, oled: true,  pir: false, series: 'v2' },
+    0x53: { name: 'VMBELPIR-20',  channels:  8, oled: false, pir: true,  series: 'v2' },
+    0x54: { name: 'VMBGP1-20',    channels:  1, oled: false, pir: false, series: 'v2' },
+    0x55: { name: 'VMBGP2-20',    channels:  2, oled: false, pir: false, series: 'v2' },
+    0x56: { name: 'VMBGP4-20',    channels:  4, oled: false, pir: false, series: 'v2' },
+    0x57: { name: 'VMBGPO-20',    channels: 32, oled: true,  pir: false, series: 'v2' },
+    0x5C: { name: 'VMBEL2PIR-20', channels:  6, oled: false, pir: true,  series: 'v2' },
+    0x5F: { name: 'VMBGP4PIR-20', channels:  8, oled: false, pir: true,  series: 'v2' },
+  };
+
+  function populateAddressDropdown(bridgeId, selectedAddr, selectedTypeId) {
+    const $addr = $('#node-input-address');
+    if (!bridgeId) return;
+
+    $.getJSON('velbus/scan-results?bridge=' + bridgeId, function(results) {
+      const modules = (results && results.modules) ? results.modules : [];
+
+      const gpTypeIds = Object.keys(GLASS_PANEL_TYPES).map(k => parseInt(k));
+      const gpModules = modules.filter(function(m) {
+        return gpTypeIds.includes(parseInt(m.typeId, 16));
+      });
+
+      if (!gpModules.length) {
+        // No glass panels on bus — restore plain text input so user can type manually
+        if ($addr.is('select')) {
+          const input = $('<input>', {
+            type: 'text', id: 'node-input-address',
+            placeholder: 'hex address e.g. 0D', style: 'width:80px'
+          });
+          $addr.replaceWith(input);
+        }
+        return;
+      }
+
+      // Build select dropdown
+      const isSelect = $addr.is('select');
+      const $sel = isSelect ? $addr : $('<select>', { id: 'node-input-address', style: 'width:100%' });
+      $sel.empty();
+      $sel.append($('<option>').val('').text('\u2014 select address \u2014'));
+
+      gpModules.forEach(function(m) {
+        const addrDec = m.addressDec;
+        const tid     = parseInt(m.typeId, 16);
+        const label   = m.address + ' \u2014 ' + m.module +
+          (m.velbusName && m.velbusName !== m.module ? ' "' + m.velbusName + '"' : '') +
+          ' (build ' + m.build + ', map v' + m.memoryMapVersion + ')';
+        const $opt = $('<option>').val(addrDec).text(label).data('typeid', tid);
+        if (addrDec === parseInt(selectedAddr)) $opt.attr('selected', true);
+        $sel.append($opt);
+      });
+
+      // Manual entry fallback at bottom
+      $sel.append($('<option>').val('__manual__').text('\u2014 enter address manually \u2014'));
+
+      if (!isSelect) $addr.replaceWith($sel);
+
+      // Selecting manual entry swaps back to text input
+      $sel.on('change', function() {
+        if ($(this).val() === '__manual__') {
+          const input = $('<input>', {
+            type: 'text', id: 'node-input-address',
+            placeholder: 'hex e.g. 0D', style: 'width:80px'
+          });
+          $(this).replaceWith(input);
+          return;
+        }
+        const addrDec = parseInt($(this).val());
+        if (addrDec) updateTypeHint(addrDec, null);
+      });
+
+      // Pre-selected address — set hint
+      if (selectedAddr) updateTypeHint(parseInt(selectedAddr), selectedTypeId);
+    });
+  }
+
+  function updateTypeHint(addrDec, knownTypeId) {
+    const $hint     = $('#gp-type-hint');
+    const $typeId   = $('#node-input-typeId');
+    const $chanCol  = $('#gp-channel-count');
+
+    // Find the selected option to get typeId
+    const $opt = $('#node-input-address option[value="' + addrDec + '"]');
+    const tid  = $opt.data('typeid') || knownTypeId || null;
+
+    if (tid !== null && GLASS_PANEL_TYPES[tid]) {
+      const t = GLASS_PANEL_TYPES[tid];
+      $typeId.val('0x' + tid.toString(16).padStart(2, '0').toUpperCase());
+
+      const extras = [];
+      if (t.oled) extras.push('OLED');
+      if (t.pir)  extras.push('PIR');
+
+      $hint.text(
+        t.name + ' — ' + t.channels + ' ch' +
+        (extras.length ? ' · ' + extras.join(', ') : '') +
+        ' · ' + t.series
+      ).show();
+
+      // Auto-fill channel count if field is empty or was auto-filled
+      const $ch = $('#node-input-channelCount');
+      if (!$ch.val() || $ch.data('auto')) {
+        $ch.val(t.channels).data('auto', true);
+      }
+    } else {
+      $hint.hide();
+      $typeId.val('');
+    }
+  }
+
+  RED.nodes.registerType('velbus-glass-panel', {
+    category:    'Velbus (inputs)',
+    color:       '#3A8C8C',
+    defaults: {
+      name:         { value: '' },
+      bridge:       { value: '', type: 'velbus-bridge', required: true },
+      address:      { value: '',  required: true, validate: function(v) { return /^(0x)?[0-9a-fA-F]{1,2}$/.test(v); } },
+      channelCount: { value: 4,   required: true, validate: RED.validators.number() },
+      moduleName:   { value: '' },
+      typeId:       { value: '' },
+    },
+    inputs:  1,
+    outputs: 3,
+    outputLabels: ['buttons', 'status / thermostat', 'name parts'],
+    icon:    'font-awesome/fa-th',
+    paletteLabel: 'glass panel',
+
+    label: function() {
+      return this.name || this.moduleName || ('GP 0x' +
+        (parseInt(this.address) || 0).toString(16).padStart(2, '0').toUpperCase());
+    },
+
+    oneditprepare: function() {
+      const self         = this;
+      const savedAddr    = this.address;
+      const savedTypeId  = this.typeId ? parseInt(this.typeId, 16) : null;
+
+      // Type ID field is read-only — populated from scan results
+      $('#node-input-typeId').prop('readonly', true).css('background', '#f0f0f0');
+
+      // Bridge change → refresh dropdown
+      $('#node-input-bridge').on('change', function() {
+        const bridgeId = $(this).val();
+        populateAddressDropdown(bridgeId, savedAddr, savedTypeId);
+      });
+
+      // Address change → update type hint
+      $('#node-input-address').on('change', function() {
+        const addrDec = parseInt($(this).val());
+        if (addrDec) updateTypeHint(addrDec, null);
+      });
+
+      // Manual channel count edit marks field as no longer auto
+      $('#node-input-channelCount').on('input', function() {
+        $(this).data('auto', false);
+      });
+
+      // Initial load — deferred so TypedInput has time to render its value.
+      // .val() returns '' during oneditprepare; the TypedInput fires 'change'
+      // once it has set its value. We trigger that manually after a short delay
+      // as a reliable fallback.
+      setTimeout(function() {
+        $('#node-input-bridge').trigger('change');
+      }, 100);
+    },
+
+    oneditsave: function() {
+      // Store the address as decimal integer
+      const raw = $('#node-input-address').val();
+      this.address = parseInt(raw) || 0;
+
+      // Store typeId from hidden field
+      const tid = $('#node-input-typeId').val();
+      this.typeId = tid || '';
+
+      // Store module name from hint for status bar use
+      if (tid) {
+        const tidNum = parseInt(tid, 16);
+        const t = GLASS_PANEL_TYPES[tidNum];
+        if (t) this.moduleName = t.name;
+      }
+    },
+  });
+
+})();
+</script>
+
+<script type="text/html" data-template-name="velbus-glass-panel">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Optional label">
+  </div>
+
+  <div class="form-row">
+    <label for="node-input-bridge"><i class="fa fa-plug"></i> Bridge</label>
+    <input type="text" id="node-input-bridge">
+  </div>
+
+  <div class="form-row">
+    <label for="node-input-address"><i class="fa fa-map-marker"></i> Address</label>
+    <input type="text" id="node-input-address" placeholder="run scan first, or type hex address" style="width:70%">
+  </div>
+
+  <div class="form-row" id="gp-type-hint-row">
+    <label></label>
+    <span id="gp-type-hint" style="color:#888; font-size:0.9em; display:none;"></span>
+  </div>
+
+  <div class="form-row" style="display:none">
+    <input type="text" id="node-input-typeId">
+    <input type="text" id="node-input-moduleName">
+  </div>
+
+  <div class="form-row">
+    <label for="node-input-channelCount"><i class="fa fa-list-ol"></i> Channels</label>
+    <input type="number" id="node-input-channelCount" min="1" max="32" style="width:80px">
+    <span style="margin-left:8px; color:#888; font-size:0.9em;">auto-filled from scan</span>
+  </div>
+</script>
+
+<script type="text/html" data-help-name="velbus-glass-panel">
+    <p style="background:#fff3cd; border-left:4px solid #ffc107; padding:8px 12px; margin-bottom:12px; font-size:0.85em;">
+    <strong>&#9888; Testing status:</strong> This node was generated with Claude.ai and is in
+    need of extensive field testing before being deployed into a commercial project.
+    It is presented "as is" &mdash; any use beyond testing is entirely at your own risk and liability.
+    Constructive feedback is welcomed, accompanied by as many examples and debug captures as possible.
+    <a href="https://github.com/MDARltd/node-red-contrib-velbus-2026/issues" target="_blank">File an issue on GitHub</a>.
+    </p>
+  <p>
+    Handles all Velbus glass panel and button modules — original and V2 series (VMBEL, VMBGP, VMBELO, VMBELPIR, VMBGPO, VMBGP4PIR families).
+    All modules include optional thermostat capability.
+    For relay and dimmer outputs see <strong>velbus-relay</strong> / <strong>velbus-dimmer</strong> nodes.
+  </p>
+
+  <h3>Outputs</h3>
+
+  <h4>Output 1 — Buttons</h4>
+  <p>Emitted on button press, release, or long-press (0x00):</p>
+  <pre>{
+  "type":        "button",
+  "on":          true,
+  "pressed":     [1, 3],
+  "released":    [2],
+  "longPressed": []
+}</pre>
+  <p>For PIR variants (VMBELPIR, VMBGP4PIR etc.) channel numbers are augmented with semantic labels where known:</p>
+  <pre>pressed: [{ "channel": 6, "label": "dark" }]</pre>
+
+  <h4>Output 2 — Status and thermostat</h4>
+  <p>Module status (0xED):</p>
+  <pre>{
+  "type":             "status",
+  "locked":           [],
+  "thermostatProgram":"manual",
+  "alarms":           { "alarm1Active": false, "alarm2Active": false, "selected": 0 },
+  "sunreel":          0,
+  "oledPage":         1        // OLED types only
+}</pre>
+  <p>Thermostat status (0xEA):</p>
+  <pre>{
+  "type":        "thermostat",
+  "currentTemp": 21.5,
+  "targetTemp":  22.0,
+  "mode":        "comfort",    // comfort | day | night | safe
+  "heaterMode":  true,
+  "heating":     false,
+  "cooling":     false,
+  "boostMode":   false,
+  "thermostatOn": true
+}</pre>
+  <p>Temperature (0xE6):</p>
+  <pre>{ "type": "temperature", "current": 21.5, "min": 15.0, "max": 30.0 }</pre>
+  <p>Light sensor — PIR types only (0xA9):</p>
+  <pre>{ "type": "light", "raw": 1024 }</pre>
+  <p>Memo text — OLED types only (0xAC):</p>
+  <pre>{ "type": "memo", "page": 1, "text": "Hello" }</pre>
+  <p>Counter — OLED types only (0xBE):</p>
+  <pre>{ "type": "counter", "counter": 1, "value": 42 }</pre>
+
+  <h4>Output 3 — Name parts</h4>
+  <pre>{ "type": "name_part", "part": 0, "text": "Living" }</pre>
+  <p>Three parts (0, 1, 2) concatenate to form the full module name as stored in VelbusLink.</p>
+
+  <h3>Input commands</h3>
+  <dl>
+    <dt><code>{ "cmd": "comfort" }</code> / <code>"day"</code> / <code>"night"</code> / <code>"safe"</code></dt>
+    <dd>Switch thermostat mode. Optional <code>sleepTime</code> (minutes, 0 = until next programme step).</dd>
+
+    <dt><code>{ "cmd": "set_temp", "pointer": 0, "temp": 21.5 }</code></dt>
+    <dd>Set target temperature. pointer: 0=comfort, 1=day, 2=night, 3=safe.</dd>
+
+    <dt><code>{ "cmd": "led_set", "channel": 1 }</code></dt>
+    <dd>Control button LED. Commands: <code>led_set</code>, <code>led_clear</code>, <code>led_slow</code>, <code>led_fast</code>, <code>led_vfast</code>.</dd>
+
+    <dt><code>{ "cmd": "output_on" }</code> / <code>"output_off"</code></dt>
+    <dd>Open collector output on/off.</dd>
+
+    <dt><code>{ "cmd": "output_timer", "duration": 60 }</code></dt>
+    <dd>Open collector output timed on (seconds).</dd>
+
+    <dt><code>{ "cmd": "get_status" }</code></dt>
+    <dd>Request module status (triggers 0xED response).</dd>
+
+    <dt><code>{ "cmd": "get_thermostat" }</code></dt>
+    <dd>Request thermostat status (triggers 0xEA response).</dd>
+
+    <dt><code>{ "cmd": "get_name" }</code></dt>
+    <dd>Request module name (triggers three 0xF0/F1/F2 responses on output 3).</dd>
+  </dl>
+
+  <h3>Supported modules</h3>
+  <p>
+    "Original": VMBGP1, VMBGP2, VMBGPO, VMBGP4PIR, VMBEL1/2/4, VMBELO, VMBELPIR, VMBEL2PIR, VMBGP1/2/4-2, VMBGPOD-2.<br>
+    "V2": VMBEL1/2/4-20, VMBELO-20, VMBELPIR-20, VMBEL2PIR-20, VMBGP1/2/4-20, VMBGPO-20, VMBGP4PIR-20.
+  </p>
+</script>

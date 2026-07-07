@@ -1,0 +1,123 @@
+<script type="text/javascript">
+  RED.nodes.registerType('velbus-relay-20', {
+    category: 'Velbus (outputs)',
+    color:    '#4A90D9',
+    defaults: {
+      name:         { value: '' },
+      bridge:       { value: '', type: 'velbus-bridge', required: true },
+      moduleAddr:   { value: '', required: true },
+      startChannel: { value: 1, required: true, validate: RED.validators.number() },
+      channelCount: { value: 4, required: true, validate: RED.validators.number() }
+    },
+    inputs:  1,
+    outputs: 2,
+    icon:    'font-awesome/fa-toggle-on',
+    label: function() {
+      if (this.name) return this.name;
+      return 'relay-20 0x' + (this.moduleAddr || '??');
+    },
+    outputLabels: ['state / events', 'warnings'],
+    oneditprepare: function() {
+      velbusPopulateAddressDropdown(
+        this,
+        '#node-input-bridge',
+        '#node-input-moduleAddr',
+        ['velbus-relay-20']
+      );
+    }
+  });
+</script>
+
+<script type="text/html" data-template-name="velbus-relay-20">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name override</label>
+    <input type="text" id="node-input-name"
+      placeholder="Leave blank to use module name from VelbusLink">
+  </div>
+  <div class="form-row">
+    <label for="node-input-bridge"><i class="fa fa-server"></i> Bridge</label>
+    <input type="text" id="node-input-bridge">
+  </div>
+  <div class="form-row">
+    <label for="node-input-moduleAddr"><i class="fa fa-microchip"></i> Address</label>
+    <input type="text" id="node-input-moduleAddr" placeholder="e.g. B9 — run scan first for dropdown" style="width:100%">
+    <div class="form-tips" style="margin-top:4px">Run a <b>velbus-scan</b> node first to populate the dropdown with discovered modules.</div>
+  </div>
+  <div class="form-row">
+    <label for="node-input-startChannel"><i class="fa fa-list-ol"></i> Start channel</label>
+    <input type="number" id="node-input-startChannel" min="1" max="8" style="width:60px">
+  </div>
+  <div class="form-row">
+    <label for="node-input-channelCount"><i class="fa fa-hashtag"></i> Channel count</label>
+    <input type="number" id="node-input-channelCount" min="1" max="8" style="width:60px">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="velbus-relay-20">
+    <p style="background:#fff3cd; border-left:4px solid #ffc107; padding:8px 12px; margin-bottom:12px; font-size:0.85em;">
+    <strong>&#9888; Testing status:</strong> This node was generated with Claude.ai and is in
+    need of extensive field testing before being deployed into a commercial project.
+    It is presented "as is" &mdash; any use beyond testing is entirely at your own risk and liability.
+    Constructive feedback is welcomed, accompanied by as many examples and debug captures as possible.
+    <a href="https://github.com/MDARltd/node-red-contrib-velbus-2026/issues" target="_blank">File an issue on GitHub</a>.
+    </p>
+  <p><strong>V2.0 series only (-20 suffix modules)</strong></p>
+  <p>For original series relay modules use the <b>velbus-relay</b> node instead.</p>
+
+  <p>Supports: <b>VMB4RYLD-20</b>, <b>VMB4RYNO-20</b>, <b>VMB1RYS-20</b></p>
+
+  <h3>Address dropdown</h3>
+  <p>Run a <b>velbus-scan</b> node first to populate the address dropdown.</p>
+
+  <h3>Output 1 — State / Events</h3>
+  <pre>
+{
+  "topic":          "relay_status",
+  "address":        "0xB9",
+  "module":         "Garage",
+  "channel":        1,
+  "state":          "on",
+  "on":             true,
+  "inhibited":      false,
+  "forcedOn":       false,
+  "forcedOff":      false,
+  "programDisabled":false,
+  "timerRunning":   false,
+  "alarmProgram":   { "program":0, "alarm1":false, ... },
+  "timestamp":      1719100000000
+}
+
+// relay_switched — fires on every local push-button-driven switch. Separate
+// from relay_status above, which reports the overall channel mode rather
+// than individual switch edges.
+{
+  "topic":   "relay_switched",
+  "address": "0xB9",
+  "module":  "Garage",
+  "channel": 1,
+  "state":   "on"   // or "off"
+}
+  </pre>
+
+  <h3>Input — Commands</h3>
+  <pre>
+{ "channel": 1,     "cmd": "on" }
+{ "channel": "all", "cmd": "off" }
+{ "channel": 1,     "cmd": "toggle" }
+{ "channel": 1,     "cmd": "timer",        "duration": 60 }
+{ "channel": 1,     "cmd": "forced_on",    "duration": -1 }
+{ "channel": 1,     "cmd": "forced_off",   "duration": 3600 }
+{ "channel": 1,     "cmd": "cancel_forced_on" }
+{ "channel": 1,     "cmd": "cancel_forced_off" }
+{ "channel": 1,     "cmd": "inhibit",      "duration": 1800 }
+{ "channel": 1,     "cmd": "cancel_inhibit" }
+{ "channel": 1,     "cmd": "status" }
+  </pre>
+  <p>Set <code>channel</code> to <code>"all"</code> to send to all channels simultaneously.</p>
+  <p>Duration in seconds. Use <code>-1</code> for permanent.</p>
+  <p><b>No interval/blink timer command.</b> Unlike the original series
+  (<b>velbus-relay</b>), V2 relays have no live bus command for a blink/interval
+  timer. It can only be achieved by writing a Program Step (Action code 22) to
+  module memory, linked to a button or scenario &mdash; a commissioning task, not
+  a live command this node sends.</p>
+</script>

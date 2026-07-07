@@ -1,0 +1,215 @@
+<script type="text/javascript">
+  RED.nodes.registerType('velbus-relay', {
+    category: 'Velbus (outputs)',
+    color:    '#4A90D9',
+    defaults: {
+      name:         { value: '' },
+      bridge:       { value: '', type: 'velbus-bridge', required: true },
+      moduleAddr:   { value: '', required: true },
+      startChannel: { value: 1, required: true, validate: RED.validators.number() },
+      channelCount: { value: 1, required: true, validate: RED.validators.number() }
+    },
+    inputs:  1,
+    outputs: 2,
+    icon:    'font-awesome/fa-toggle-on',
+    label: function() {
+      if (this.name) return this.name;
+      return 'relay 0x' + (this.moduleAddr || '??');
+    },
+    outputLabels: ['state / events', 'warnings'],
+    oneditprepare: function() {
+      velbusPopulateAddressDropdown(
+        this,
+        '#node-input-bridge',
+        '#node-input-moduleAddr',
+        ['velbus-relay']
+      );
+    }
+  });
+
+  // ── Shared address dropdown helper ──────────────────────────────────────
+  // Queries the bridge's scan results endpoint and populates a select element.
+  // Falls back to plain text input if no scan results are available.
+  // nodeTypes: array of suggestedNode values to filter by (or null for all)
+
+  function velbusPopulateAddressDropdown(nodeCtx, bridgeSelector, addrSelector, nodeTypes) {
+    const addrField = $(addrSelector);
+    const currentVal = addrField.val() || nodeCtx.moduleAddr || '';
+
+    function buildDropdown(modules) {
+      const filtered = nodeTypes
+        ? modules.filter(m => nodeTypes.includes(m.suggestedNode))
+        : modules;
+
+      if (filtered.length === 0) {
+        // No matching modules — keep plain text input
+        addrField.show();
+        return;
+      }
+
+      // Replace input with select, preserving current value
+      const select = $('<select>', { id: addrSelector.replace('#',''), style: 'width:100%' });
+
+      // Blank option — manual entry fallback
+      select.append($('<option>', { value: '', text: '— select or type address —' }));
+
+      for (const m of filtered) {
+        const label = m.address + '  ' + m.module +
+          (m.module !== (m.velbusName || '') && m.velbusName ? '  "' + m.velbusName + '"' : '') +
+          '  (build ' + m.build + ', map v' + m.memoryMapVersion + ')';
+        const opt = $('<option>', { value: m.address.replace('0x',''), text: label });
+        if (m.address.replace('0x','').toUpperCase() === currentVal.toUpperCase()) {
+          opt.prop('selected', true);
+        }
+        select.append(opt);
+      }
+
+      // Manual entry option at bottom
+      select.append($('<option>', { value: '__manual__', text: '— enter address manually —' }));
+
+      addrField.replaceWith(select);
+
+      // Store module data on each option for auto-population
+      select.find('option').each(function() {
+        const val = $(this).val();
+        if (val && val !== '__manual__') {
+          const m = filtered.find(x => x.address.replace('0x','').toUpperCase() === val.toUpperCase());
+          if (m) $(this).data('module', m);
+        }
+      });
+
+      // On selection: auto-populate channelCount if available
+      select.on('change', function() {
+        if ($(this).val() === '__manual__') {
+          const input = $('<input>', {
+            type: 'text', id: addrSelector.replace('#',''),
+            placeholder: 'e.g. A0', style: 'width:80px'
+          });
+          $(this).replaceWith(input);
+          return;
+        }
+        const m = $(this).find(':selected').data('module');
+        if (m && m.channels) {
+          const ccField = $('#node-input-channelCount');
+          if (ccField.length) ccField.val(m.channels);
+        }
+      });
+    }
+
+    function loadResults() {
+      const bridgeId = $(bridgeSelector).val();
+      if (!bridgeId) return;
+
+      $.getJSON('velbus/scan-results?bridge=' + bridgeId, function(data) {
+        if (data && data.modules && data.modules.length > 0) {
+          buildDropdown(data.modules);
+        }
+        // If no results, plain text input stays as-is
+      }).fail(function() {
+        // Endpoint not reachable — plain text input stays
+      });
+    }
+
+    // Load on open, and reload if bridge selection changes
+    loadResults();
+    $(bridgeSelector).on('change', loadResults);
+  }
+</script>
+
+<script type="text/html" data-template-name="velbus-relay">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name override</label>
+    <input type="text" id="node-input-name"
+      placeholder="Leave blank to use module name from VelbusLink">
+  </div>
+  <div class="form-row">
+    <label for="node-input-bridge"><i class="fa fa-server"></i> Bridge</label>
+    <input type="text" id="node-input-bridge">
+  </div>
+  <div class="form-row">
+    <label for="node-input-moduleAddr"><i class="fa fa-microchip"></i> Address</label>
+    <input type="text" id="node-input-moduleAddr" placeholder="e.g. A0 — run scan first for dropdown" style="width:100%">
+    <div class="form-tips" style="margin-top:4px">Run a <b>velbus-scan</b> node first to populate the dropdown with discovered modules.</div>
+  </div>
+  <div class="form-row">
+    <label for="node-input-startChannel"><i class="fa fa-list-ol"></i> Start channel</label>
+    <input type="number" id="node-input-startChannel" min="1" max="8" style="width:60px">
+  </div>
+  <div class="form-row">
+    <label for="node-input-channelCount"><i class="fa fa-hashtag"></i> Channel count</label>
+    <input type="number" id="node-input-channelCount" min="1" max="8" style="width:60px">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="velbus-relay">
+    <p style="background:#fff3cd; border-left:4px solid #ffc107; padding:8px 12px; margin-bottom:12px; font-size:0.85em;">
+    <strong>&#9888; Testing status:</strong> This node was generated with Claude.ai and is in
+    need of extensive field testing before being deployed into a commercial project.
+    It is presented "as is" &mdash; any use beyond testing is entirely at your own risk and liability.
+    Constructive feedback is welcomed, accompanied by as many examples and debug captures as possible.
+    <a href="https://github.com/MDARltd/node-red-contrib-velbus-2026/issues" target="_blank">File an issue on GitHub</a>.
+    </p>
+  <p><strong>Original series only (pre V2.0)</strong></p>
+  <p>For V2.0 relay modules (VMB4RYLD-20, VMB4RYNO-20, VMB1RYS-20) use the <b>velbus-relay-20</b> node instead.</p>
+
+  <p>Interprets original series Velbus relay module packets and encodes commands.</p>
+  <p>Supports: <b>VMB1RY</b>, <b>VMB4RY</b>, <b>VMB4RYLD</b>, <b>VMB4RYNO</b>,
+  <b>VMB1RYNO</b>, <b>VMB1RYNOS</b>, <b>VMB1RYS</b>, <b>VMB4RYLD-10</b>, <b>VMB4RYNO-10</b></p>
+
+  <h3>Address dropdown</h3>
+  <p>Run a <b>velbus-scan</b> node first. The address field will show a dropdown of
+  discovered relay modules from the most recent scan. Select any to configure, or
+  choose "enter address manually" to type a hex address directly.</p>
+
+  <h3>Output 1 — State / Events</h3>
+  <pre>
+{
+  "topic":          "relay_status",
+  "address":        "0xA0",
+  "module":         "Living Room",
+  "channel":        1,
+  "channelBit":     "0x01",
+  "state":          "on",   // off | on | timer_running | forced_on | forced_off | inhibited
+  "on":             true,
+  "timerRemaining": 0,
+  "ledState":       "off",
+  "timestamp":      1719100000000
+}
+
+// relay_switched — fires on every pulse edge during an interval_timer blink,
+// and on every local push-button-driven switch. Note this is separate from
+// relay_status above: relay_status only reports off/on/timer_running as
+// three fixed states and does NOT toggle per pulse — relay_switched is
+// where the per-pulse on/off transitions actually show up.
+{
+  "topic":      "relay_switched",
+  "address":    "0xA0",
+  "module":     "Living Room",
+  "channel":    1,
+  "channelBit": "0x01",
+  "state":      "on"   // or "off"
+}
+  </pre>
+
+  <h3>Input — Commands</h3>
+  <pre>
+{ "channel": 1, "cmd": "on" }
+{ "channel": 1, "cmd": "off" }
+{ "channel": 1, "cmd": "toggle" }
+{ "channel": 1, "cmd": "timer",        "duration": 60 }
+{ "channel": 1, "cmd": "interval_timer", "duration": 3600 }
+{ "channel": 1, "cmd": "forced_on",    "duration": 3600 }
+{ "channel": 1, "cmd": "forced_off",   "duration": 3600 }
+{ "channel": 1, "cmd": "cancel_forced_on" }
+{ "channel": 1, "cmd": "cancel_forced_off" }
+{ "channel": 1, "cmd": "inhibit",      "duration": 1800 }
+{ "channel": 1, "cmd": "cancel_inhibit" }
+{ "channel": 1, "cmd": "status" }
+  </pre>
+  <p>Duration in seconds. Use <code>-1</code> for permanent.</p>
+  <p><b>interval_timer</b> makes the relay blink at the module's own fixed rate for
+  <code>duration</code> seconds (<code>-1</code> = blinks permanently until cancelled).
+  There is no bus command to set a custom on/off rate &mdash; the module's blink speed
+  is fixed in firmware, not configurable via this command. Status reports this as
+  <code>timer_running</code> (protocol term: "interval timer on") on Output 1.</p>
+</script>

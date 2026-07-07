@@ -1,0 +1,87 @@
+<script type="text/javascript">
+  RED.nodes.registerType('velbus-scan', {
+    category: 'Velbus (inputs)',
+    color:    '#3A8C8C',
+    defaults: {
+      name:        { value: '' },
+      bridge:      { value: '', type: 'velbus-bridge', required: true },
+      rtrDelay:    { value: 75,   validate: RED.validators.number() },
+      collectTime: { value: 8000, validate: RED.validators.number() }
+    },
+    inputs:  1,
+    outputs: 2,
+    icon:    'font-awesome/fa-search',
+    label: function() { return this.name || 'velbus scan'; },
+    outputLabels: ['scan complete (array)', 'module found (one per module)']
+  });
+</script>
+
+<script type="text/html" data-template-name="velbus-scan">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="velbus scan">
+  </div>
+  <div class="form-row">
+    <label for="node-input-bridge"><i class="fa fa-server"></i> Bridge</label>
+    <input type="text" id="node-input-bridge">
+  </div>
+  <div class="form-row">
+    <label for="node-input-rtrDelay"><i class="fa fa-clock-o"></i> RTR delay (ms)</label>
+    <input type="number" id="node-input-rtrDelay" min="50" max="500" style="width:80px">
+    &nbsp;<small>Time between RTR packets (default 75ms)</small>
+  </div>
+  <div class="form-row">
+    <label for="node-input-collectTime"><i class="fa fa-hourglass-half"></i> Collect time (ms)</label>
+    <input type="number" id="node-input-collectTime" min="2000" max="30000" style="width:80px">
+    &nbsp;<small>Wait after last RTR for responses (default 8000ms)</small>
+  </div>
+</script>
+
+<script type="text/html" data-help-name="velbus-scan">
+    <p style="background:#fff3cd; border-left:4px solid #ffc107; padding:8px 12px; margin-bottom:12px; font-size:0.85em;">
+    <strong>&#9888; Testing status:</strong> This node was generated with Claude.ai and is in
+    need of extensive field testing before being deployed into a commercial project.
+    It is presented "as is" &mdash; any use beyond testing is entirely at your own risk and liability.
+    Constructive feedback is welcomed, accompanied by as many examples and debug captures as possible.
+    <a href="https://github.com/MDARltd/node-red-contrib-velbus-2026/issues" target="_blank">File an issue on GitHub</a>.
+    </p>
+  <p>Scans the Velbus bus and discovers all connected modules.</p>
+  <p>For original series V1 modules, use <b>velbus-relay</b>. For -20 series modules, use <b>velbus-relay-20</b>.</p>
+
+  <h3>How it works</h3>
+  <p>Sends RTR packets to every address (0x01–0xFE) at a fixed interval.
+  Modules respond asynchronously — responses are collected for the
+  <b>Collect time</b> after the last RTR is sent.</p>
+  <p>Total scan time = <i>(RTR delay × 254) + collect time</i>.
+  At defaults: about 27 seconds.</p>
+
+  <h3>Triggering</h3>
+  <p>Inject any message. Payload: <code>"scan"</code>, <code>true</code>, <code>1</code>,
+  or <code>{ "cmd": "scan" }</code>. Send <code>"cancel"</code> to abort.</p>
+
+  <h3>Output 1 — Scan complete</h3>
+  <pre>
+{
+  "topic":   "scan_complete",
+  "count":   35,
+  "modules": [
+    {
+      "address":          "0x03",
+      "addressDec":       3,
+      "typeId":           "0x36",
+      "module":           "VMBEL4",
+      "serial":           "19E4",
+      "build":            3433,
+      "memoryMapVersion": 2,
+      "canFD":            false,
+      "suggestedNode":    "velbus-button",
+      "subaddresses":     []
+    }, ...
+  ]
+}
+  </pre>
+
+  <h3>Output 2 — Module found</h3>
+  <p>One message per discovered module as it responds. Same fields
+  as above with <code>topic: "module_found"</code>.</p>
+</script>

@@ -1,0 +1,113 @@
+<script type="text/javascript">
+(function() {
+
+  RED.nodes.registerType('velbus-meteo', {
+    category:  'Velbus (inputs)',
+    color:     '#3A8C8C',
+    defaults: {
+      name:    { value: '' },
+      bridge:  { value: '', type: 'velbus-bridge', required: true },
+      address: { value: '', required: true, validate: function(v) { return /^(0x)?[0-9a-fA-F]{1,2}$/.test(v); } },
+    },
+    inputs:  1,
+    outputs: 2,
+    outputLabels: ['alarms / status', 'temperature / rain / light / wind'],
+    icon:    'font-awesome/fa-cloud',
+    paletteLabel: 'meteo',
+
+    label: function() {
+      const addr = parseInt(this.address) || 0;
+      return (this.name || 'VMBMETEO') + ' 0x' +
+        addr.toString(16).padStart(2,'0').toUpperCase();
+    },
+
+    oneditprepare: function() {
+      const savedAddr = this.address;
+
+      function populateDropdown(bridgeId) {
+        if (!bridgeId) return;
+        $.getJSON('velbus/scan-results?bridge=' + bridgeId, function(results) {
+          const modules = (results && results.modules) ? results.modules : [];
+          const $addr = $('#node-input-address');
+          $addr.empty().append($('<option>').val('').text('— select address —'));
+
+          const meteoModules = modules.filter(m => parseInt(m.typeId, 16) === 0x31);
+          if (!meteoModules.length) {
+            $addr.append($('<option>').val('').text('No VMBMETEO found on bus'));
+            return;
+          }
+          meteoModules.forEach(function(m) {
+            const label = m.address + ' — ' + m.module;
+            const $opt = $('<option>').val(m.addressDec).text(label);
+            if (m.addressDec === parseInt(savedAddr)) $opt.attr('selected', true);
+            $addr.append($opt);
+          });
+        });
+      }
+
+      $('#node-input-bridge').on('change', function() { populateDropdown($(this).val()); });
+      // Deferred load — TypedInput sets value async after oneditprepare
+
+      $('#node-input-bridge').trigger('change');
+
+      setTimeout(function() { $('#node-input-bridge').trigger('change'); }, 150);
+    },
+
+    oneditsave: function() {
+      this.address = parseInt($('#node-input-address').val()) || 0;
+    },
+  });
+
+})();
+</script>
+
+<script type="text/html" data-template-name="velbus-meteo">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Optional label">
+  </div>
+  <div class="form-row">
+    <label for="node-input-bridge"><i class="fa fa-plug"></i> Bridge</label>
+    <input type="text" id="node-input-bridge">
+  </div>
+  <div class="form-row">
+    <label for="node-input-address"><i class="fa fa-map-marker"></i> Address</label>
+    <select id="node-input-address" style="width:70%">
+      <option value="">— select bridge first —</option>
+    </select>
+  </div>
+</script>
+
+<script type="text/html" data-help-name="velbus-meteo">
+  <p>Weather station node for the VMBMETEO module (0x31).</p>
+
+  <h3>Output 1 — Alarms / status</h3>
+  <p>Alarm event (0x00) — fires when a configured threshold alarm changes:</p>
+  <pre>{ "type": "alarm", "on": true,
+  "pressed": ["alarm1","alarm3"], "released": [], "longPressed": [] }</pre>
+  <p>Module status (0xED):</p>
+  <pre>{ "type": "status", "on": false,
+  "alarms": { "alarm1": false, ... "alarm8": false },
+  "locked": { "alarm1": false, ... },
+  "program": "group1", "autoSendInterval": 30, "testMode": false }</pre>
+
+  <h3>Output 2 — Sensor values</h3>
+  <p>Temperature (0xE6):</p>
+  <pre>{ "type": "temperature", "current": 21.5, "min": 5.0, "max": 35.0 }</pre>
+  <p>Rain / light / wind (0xA9):</p>
+  <pre>{ "type": "meteo", "rain": 0.5, "light": 12500, "wind": 14.3,
+  "raw": { "rain": 5, "light": 12500, "wind": 143 } }</pre>
+  <p>Units: rain mm/h, light lux, wind km/h.</p>
+  <p>Sensor text (0xAC):</p>
+  <pre>{ "type": "meteo_text", "sensor": "wind", "startPos": 0, "text": "14.3 km/h" }</pre>
+
+  <h3>Input commands</h3>
+  <dl>
+    <dt><code>{ "cmd": "get_status" }</code></dt><dd>Request module status.</dd>
+    <dt><code>{ "cmd": "get_temp", "interval": 30 }</code></dt><dd>Request temperature. interval=0 no change.</dd>
+    <dt><code>{ "cmd": "get_meteo", "sensor": "all", "interval": 30 }</code></dt>
+    <dd>Request sensor values. sensor: "rain", "light", "wind", or "all".</dd>
+    <dt><code>{ "cmd": "get_alarm_name", "channel": 1 }</code></dt><dd>Request alarm channel name from VelbusLink.</dd>
+    <dt><code>{ "cmd": "test_on" }</code> / <code>{ "cmd": "test_off" }</code></dt><dd>Test mode (30 minute timeout).</dd>
+  </dl>
+</script>

@@ -1,0 +1,184 @@
+<script type="text/javascript">
+(function() {
+
+  RED.nodes.registerType('velbus-thermostat', {
+    category:  'Velbus (inputs)',
+    color:     '#3A8C8C',
+    defaults: {
+      name:       { value: '' },
+      bridge:     { value: '', type: 'velbus-bridge', required: true },
+      address:    { value: '', required: true, validate: function(v) { return /^(0x)?[0-9a-fA-F]{1,2}$/.test(v); } },
+      moduleName: { value: '' },
+    },
+    inputs:  1,
+    outputs: 2,
+    outputLabels: ['thermostat / settings / programme', 'temperature'],
+    icon:    'font-awesome/fa-thermometer-half',
+    paletteLabel: 'thermostat',
+
+    label: function() {
+      return this.name || this.moduleName
+        ? (this.name || this.moduleName) + ' thermostat'
+        : 'thermostat 0x' + (parseInt(this.address) || 0).toString(16).padStart(2, '0').toUpperCase();
+    },
+
+    oneditprepare: function() {
+      const self       = this;
+      const savedAddr  = this.address;
+
+      function populateDropdown(bridgeId) {
+        const $addr = $('#node-input-address');
+        if (!bridgeId) return;
+
+        $.getJSON('velbus/scan-results?bridge=' + bridgeId, function(results) {
+          const modules = (results && results.modules) ? results.modules : [];
+          if (!modules.length) return;
+
+          $addr.empty().append($('<option>').val('').text('— select address —'));
+
+          const GP_TYPE_PREFIXES = [
+            0x21, 0x2D, 0x34, 0x35, 0x36, 0x37, 0x38, 0x47,
+            0x3A, 0x3B, 0x3C, 0x3D,
+            0x4F, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56,
+            0x57, 0x5C, 0x5F,
+            0x32, // VMB4AN also has thermostat preset model
+          ];
+
+          const gpModules = modules.filter(m => {
+            const tid = parseInt(m.typeId, 16);
+            return GP_TYPE_PREFIXES.includes(tid);
+          });
+
+          if (!gpModules.length) {
+            $addr.append($('<option>').val('').text('No thermostat modules found'));
+            return;
+          }
+
+          gpModules.forEach(function(m) {
+            const label = m.address + ' — ' + m.module;
+            const $opt  = $('<option>').val(m.addressDec).text(label);
+            if (m.addressDec === parseInt(savedAddr)) $opt.attr('selected', true);
+            $addr.append($opt);
+          });
+        });
+      }
+
+      $('#node-input-bridge').on('change', function() {
+        populateDropdown($(this).val());
+      });
+
+      // Deferred load — TypedInput sets value async after oneditprepare
+
+
+      $('#node-input-bridge').trigger('change');
+
+
+      setTimeout(function() { $('#node-input-bridge').trigger('change'); }, 150);
+    },
+
+    oneditsave: function() {
+      this.address = parseInt($('#node-input-address').val()) || 0;
+    },
+  });
+
+})();
+</script>
+
+<script type="text/html" data-template-name="velbus-thermostat">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Optional label">
+  </div>
+
+  <div class="form-row">
+    <label for="node-input-bridge"><i class="fa fa-plug"></i> Bridge</label>
+    <input type="text" id="node-input-bridge">
+  </div>
+
+  <div class="form-row">
+    <label for="node-input-address"><i class="fa fa-map-marker"></i> Address</label>
+    <select id="node-input-address" style="width:70%">
+      <option value="">— select bridge first —</option>
+    </select>
+  </div>
+
+  <div class="form-row" style="display:none">
+    <input type="text" id="node-input-moduleName">
+  </div>
+
+  <p style="margin-top:12px; color:#888; font-size:0.9em; padding-left:110px;">
+    Target the primary module address — not the thermostat sub-address.<br>
+    Can share an address with a <strong>velbus-glass-panel</strong> node.
+  </p>
+</script>
+
+<script type="text/html" data-help-name="velbus-thermostat">
+  <p>
+    Dedicated thermostat control node for all Velbus glass panel modules — VMBEL, VMBGP,
+    VMBELO and VMBGPO families, original and V2 series.
+    For button press events from the same module use a <strong>velbus-glass-panel</strong> node
+    on the same address.
+  </p>
+  <p>
+    All commands go to the <strong>primary module address</strong>. The thermostat sub-address
+    is a source address for button events only and is handled transparently by the bridge.
+  </p>
+
+  <h3>Output 1 — Thermostat and settings</h3>
+  <p>Thermostat status (0xEA):</p>
+  <pre>{
+  "type":        "thermostat",
+  "currentTemp": 21.5,
+  "targetTemp":  22.0,
+  "mode":        "comfort",    // comfort | day | night | safe
+  "heaterMode":  true,         // true=heat, false=cool
+  "heating":     false,        // actively heating
+  "cooling":     false,        // actively cooling
+  "boostMode":   false,
+  "thermostatOn": true
+}</pre>
+  <p>Temperature preset settings (0xE8) — on <code>get_settings</code> command:</p>
+  <pre>{
+  "type":    "temp_settings",
+  "comfort": 22.0,
+  "day":     20.0,
+  "night":   18.0,
+  "safe":    12.0
+}</pre>
+  <p>Programme status (0xED) — on <code>get_status</code> command:</p>
+  <pre>{
+  "type":              "programme",
+  "thermostatProgram": "manual",  // disabled | manual | timer | timer_override
+  "alarms":            { "alarm1Active": false, "alarm2Active": false }
+}</pre>
+
+  <h3>Output 2 — Temperature</h3>
+  <pre>{ "type": "temperature", "current": 21.5, "min": 15.0, "max": 30.0 }</pre>
+
+  <h3>Input commands</h3>
+  <dl>
+    <dt><code>{ "cmd": "comfort" }</code> / <code>"day"</code> / <code>"night"</code> / <code>"safe"</code></dt>
+    <dd>Switch thermostat mode. Optional <code>sleepTime</code> in minutes (0 = until next programme step).</dd>
+
+    <dt><code>{ "cmd": "set_temp", "pointer": 0, "temp": 21.5 }</code></dt>
+    <dd>Set a preset target temperature. pointer: 0=comfort, 1=day, 2=night, 3=safe.</dd>
+
+    <dt><code>{ "cmd": "get_thermostat" }</code></dt>
+    <dd>Request current thermostat status (triggers 0xEA response on output 1).</dd>
+
+    <dt><code>{ "cmd": "get_settings" }</code></dt>
+    <dd>Request all four preset temperatures (triggers 0xE8 response on output 1).</dd>
+
+    <dt><code>{ "cmd": "get_status" }</code></dt>
+    <dd>Request module status — returns programme mode and alarm state on output 1.</dd>
+
+    <dt><code>{ "cmd": "heat_mode" }</code> / <code>{ "cmd": "cool_mode" }</code></dt>
+    <dd>Switch between heating and cooling mode.</dd>
+  </dl>
+
+  <h3>Supported modules</h3>
+  <p>
+    All VMBEL, VMBGP, VMBELO and VMBGPO variants (original and V2 series).<br>
+    VMB4AN (shares the same 4-preset thermostat model).
+  </p>
+</script>

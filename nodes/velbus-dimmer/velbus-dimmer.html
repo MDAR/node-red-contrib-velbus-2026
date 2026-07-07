@@ -1,0 +1,174 @@
+<script type="text/javascript">
+
+  // ── Shared address dropdown helper ──────────────────────────────────────────
+  function velbusPopulateAddressDropdown(nodeCtx, bridgeSelector, addrSelector, nodeTypes) {
+    var addrField  = $(addrSelector);
+    var currentVal = String(addrField.val() || nodeCtx.address || nodeCtx.moduleAddr || '').replace('0x','').toUpperCase();
+
+    function buildDropdown(modules) {
+      var filtered = nodeTypes
+        ? modules.filter(function(m) { return nodeTypes.indexOf(m.suggestedNode) !== -1; })
+        : modules;
+
+      if (filtered.length === 0) {
+        addrField.show();
+        return;
+      }
+
+      var select = $('<select>', { id: addrSelector.replace('#',''), style: 'width:100%' });
+      select.append($('<option>', { value: '', text: '\u2014 select or type address \u2014' }));
+
+      filtered.forEach(function(m) {
+        var addrHex = m.address.replace('0x','').toUpperCase();
+        var label = m.address + '  ' + m.module +
+          (m.velbusName && m.velbusName !== m.module ? '  "' + m.velbusName + '"' : '') +
+          '  (build ' + m.build + ', map v' + m.memoryMapVersion + ')';
+        var opt = $('<option>', { value: addrHex, text: label });
+        if (addrHex === currentVal) opt.prop('selected', true);
+        select.append(opt);
+        opt.data('module', m);
+      });
+
+      select.append($('<option>', { value: '__manual__', text: '\u2014 enter address manually \u2014' }));
+      addrField.replaceWith(select);
+
+      select.on('change', function() {
+        if ($(this).val() === '__manual__') {
+          var input = $('<input>', {
+            type: 'text', id: addrSelector.replace('#',''),
+            placeholder: 'hex e.g. A0', style: 'width:80px'
+          });
+          $(this).replaceWith(input);
+          return;
+        }
+        var m = $(this).find(':selected').data('module');
+        if (m && m.channels) {
+          var cc = $('#node-input-channelCount');
+          if (cc.length) cc.val(m.channels);
+        }
+      });
+    }
+
+    function loadResults() {
+      var bridgeId = $(bridgeSelector).val();
+      if (!bridgeId) return;
+      $.getJSON('velbus/scan-results?bridge=' + bridgeId, function(data) {
+        if (data && data.modules && data.modules.length > 0) buildDropdown(data.modules);
+      }).fail(function() {});
+    }
+
+    $(bridgeSelector).on('change', loadResults);
+    setTimeout(function() { $(bridgeSelector).trigger('change'); }, 150);
+  }
+
+  RED.nodes.registerType('velbus-dimmer', {
+    category: 'Velbus (outputs)',
+    color:    '#4A90D9',
+    defaults: {
+      name:         { value: '' },
+      bridge:       { value: '', type: 'velbus-bridge', required: true },
+      moduleAddr:   { value: '', required: true },
+      startChannel: { value: 1, required: true, validate: RED.validators.number() },
+      channelCount: { value: 1, required: true, validate: RED.validators.number() }
+    },
+    inputs:  1,
+    outputs: 2,
+    icon:    'font-awesome/fa-sliders',
+    label: function() {
+      if (this.name) return this.name;
+      return 'dimmer 0x' + (this.moduleAddr || '??');
+    },
+    outputLabels: ['state / events', 'warnings'],
+    oneditprepare: function() {
+      velbusPopulateAddressDropdown(
+        this,
+        '#node-input-bridge',
+        '#node-input-moduleAddr',
+        ['velbus-dimmer']
+      );
+    }
+  });
+</script>
+
+<script type="text/html" data-template-name="velbus-dimmer">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name override</label>
+    <input type="text" id="node-input-name"
+      placeholder="Leave blank to use module name from VelbusLink">
+  </div>
+  <div class="form-row">
+    <label for="node-input-bridge"><i class="fa fa-server"></i> Bridge</label>
+    <input type="text" id="node-input-bridge">
+  </div>
+  <div class="form-row">
+    <label for="node-input-moduleAddr"><i class="fa fa-microchip"></i> Address</label>
+    <input type="text" id="node-input-moduleAddr" placeholder="e.g. BF — run scan first for dropdown" style="width:100%">
+    <div class="form-tips" style="margin-top:4px">Run a <b>velbus-scan</b> node first to populate the dropdown with discovered modules.</div>
+  </div>
+  <div class="form-row">
+    <label for="node-input-startChannel"><i class="fa fa-list-ol"></i> Start channel</label>
+    <input type="number" id="node-input-startChannel" min="1" max="4" style="width:60px">
+  </div>
+  <div class="form-row">
+    <label for="node-input-channelCount"><i class="fa fa-hashtag"></i> Channel count</label>
+    <input type="number" id="node-input-channelCount" min="1" max="4" style="width:60px">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="velbus-dimmer">
+    <p style="background:#fff3cd; border-left:4px solid #ffc107; padding:8px 12px; margin-bottom:12px; font-size:0.85em;">
+    <strong>&#9888; Testing status:</strong> This node was generated with Claude.ai and is in
+    need of extensive field testing before being deployed into a commercial project.
+    It is presented "as is" &mdash; any use beyond testing is entirely at your own risk and liability.
+    Constructive feedback is welcomed, accompanied by as many examples and debug captures as possible.
+    <a href="https://github.com/MDARltd/node-red-contrib-velbus-2026/issues" target="_blank">File an issue on GitHub</a>.
+    </p>
+  <p><strong>Original series only (pre V2.0)</strong></p>
+  <p>For V2.0 dimmer modules (VMB2DC-20, VMB8DC-20, VMB4LEDPWM-20) use the <b>velbus-dimmer-20</b> node instead.</p>
+
+  <p>Supports: <b>VMBDMI</b> (1ch), <b>VMBDMI-R</b> (1ch), <b>VMB4DC</b> (4ch)</p>
+
+  <h3>Address dropdown</h3>
+  <p>Run a <b>velbus-scan</b> node first to populate the address dropdown.</p>
+
+  <h3>Output 1 — State / Events</h3>
+  <pre>
+{
+  "topic":          "dimmer_status",
+  "address":        "0xBF",
+  "module":         "Bathroom",
+  "channel":        1,
+  "state":          "on",
+  "on":             true,
+  "level":          75,
+  "percent":        75.0,
+  "timerRemaining": 0,
+  "thermal": {
+    "tempBand": 0,
+    "loadType": 0,
+    "error":    0
+  },
+  "timestamp": 1719100000000
+}
+  </pre>
+
+  <h3>Input — Commands</h3>
+  <pre>
+{ "channel": 1, "cmd": "set",     "level": 75 }
+{ "channel": 1, "cmd": "set",     "percent": 75, "dimspeed": 3 }
+{ "channel": 1, "cmd": "on" }
+{ "channel": 1, "cmd": "off" }
+{ "channel": 1, "cmd": "restore" }
+{ "channel": 1, "cmd": "stop" }
+{ "channel": 1, "cmd": "timer",        "duration": 30 }
+{ "channel": 1, "cmd": "forced_on",    "duration": -1 }
+{ "channel": 1, "cmd": "forced_off",   "duration": 3600 }
+{ "channel": 1, "cmd": "cancel_forced_on" }
+{ "channel": 1, "cmd": "cancel_forced_off" }
+{ "channel": 1, "cmd": "inhibit",      "duration": 1800 }
+{ "channel": 1, "cmd": "cancel_inhibit" }
+{ "channel": 1, "cmd": "status" }
+  </pre>
+  <p>dimspeed in seconds (0=instant). Duration in seconds, -1=permanent.</p>
+  <p>VMB4DC: set <code>channel</code> to <code>"all"</code> for all channels simultaneously.</p>
+</script>

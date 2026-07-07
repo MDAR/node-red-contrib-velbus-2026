@@ -1,0 +1,180 @@
+<script type="text/javascript">
+(function() {
+
+  const PIR_TYPES = {
+    0x2A: { name: 'VMBPIRM',    hasTempSensor: false, series: 'original' },
+    0x2B: { name: 'VMBPIRC',    hasTempSensor: false, series: 'original' },
+    0x2C: { name: 'VMBPIRO',    hasTempSensor: true,  series: 'original' },
+    0x23: { name: 'VMBPIRO-10', hasTempSensor: true,  series: '-10'      },
+  };
+
+  RED.nodes.registerType('velbus-pir', {
+    category:  'Velbus (inputs)',
+    color:     '#3A8C8C',
+    defaults: {
+      name:       { value: '' },
+      bridge:     { value: '', type: 'velbus-bridge', required: true },
+      address:    { value: '', required: true, validate: function(v) { return /^(0x)?[0-9a-fA-F]{1,2}$/.test(v); } },
+      moduleName: { value: '' },
+      typeId:     { value: '' },
+    },
+    inputs:  1,
+    outputs: 2,
+    outputLabels: ['channel / status / light', 'temperature'],
+    icon:    'font-awesome/fa-eye',
+    paletteLabel: 'pir',
+
+    label: function() {
+      const t = this.typeId ? PIR_TYPES[parseInt(this.typeId, 16)] : null;
+      const n = this.name || this.moduleName || (t ? t.name : 'PIR');
+      return n + ' 0x' + (parseInt(this.address) || 0).toString(16).padStart(2,'0').toUpperCase();
+    },
+
+    oneditprepare: function() {
+      const savedAddr   = this.address;
+      const savedTypeId = this.typeId ? parseInt(this.typeId, 16) : null;
+
+      $('#node-input-typeId').prop('readonly', true).css('background', '#f0f0f0');
+
+      function populateDropdown(bridgeId) {
+        if (!bridgeId) return;
+        $.getJSON('velbus/scan-results?bridge=' + bridgeId, function(results) {
+          const modules = (results && results.modules) ? results.modules : [];
+          if (!modules.length) return;
+
+          const $addr = $('#node-input-address');
+          $addr.empty().append($('<option>').val('').text('— select address —'));
+
+          const pirTypeIds = Object.keys(PIR_TYPES).map(k => parseInt(k));
+          const pirModules = modules.filter(m => pirTypeIds.includes(parseInt(m.typeId, 16)));
+
+          if (!pirModules.length) {
+            $addr.append($('<option>').val('').text('No PIR modules found on bus'));
+            return;
+          }
+
+          pirModules.forEach(function(m) {
+            const tid   = parseInt(m.typeId, 16);
+            const label = m.address + ' — ' + m.module;
+            const $opt  = $('<option>').val(m.addressDec).text(label).data('typeid', tid);
+            if (m.addressDec === parseInt(savedAddr)) $opt.attr('selected', true);
+            $addr.append($opt);
+          });
+
+          if (savedAddr) updateHint(parseInt(savedAddr));
+        });
+      }
+
+      function updateHint(addrDec) {
+        const $opt = $('#node-input-address option[value="' + addrDec + '"]');
+        const tid  = $opt.data('typeid');
+        if (tid && PIR_TYPES[tid]) {
+          const t = PIR_TYPES[tid];
+          $('#pir-type-hint').text(
+            t.name + ' · ' + t.series +
+            (t.hasTempSensor ? ' · temperature sensor' : '')
+          ).show();
+          $('#node-input-typeId').val('0x' + tid.toString(16).padStart(2,'0').toUpperCase());
+        } else {
+          $('#pir-type-hint').hide();
+        }
+      }
+
+      $('#node-input-bridge').on('change', function() { populateDropdown($(this).val()); });
+      $('#node-input-address').on('change', function() { updateHint(parseInt($(this).val())); });
+
+      // Deferred load — TypedInput sets value async after oneditprepare
+
+
+      $('#node-input-bridge').trigger('change');
+
+
+      setTimeout(function() { $('#node-input-bridge').trigger('change'); }, 150);
+    },
+
+    oneditsave: function() {
+      this.address = parseInt($('#node-input-address').val()) || 0;
+      const tid = $('#node-input-typeId').val();
+      this.typeId = tid || '';
+      if (tid) {
+        const t = PIR_TYPES[parseInt(tid, 16)];
+        if (t) this.moduleName = t.name;
+      }
+    },
+  });
+
+})();
+</script>
+
+<script type="text/html" data-template-name="velbus-pir">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Optional label">
+  </div>
+  <div class="form-row">
+    <label for="node-input-bridge"><i class="fa fa-plug"></i> Bridge</label>
+    <input type="text" id="node-input-bridge">
+  </div>
+  <div class="form-row">
+    <label for="node-input-address"><i class="fa fa-map-marker"></i> Address</label>
+    <select id="node-input-address" style="width:70%">
+      <option value="">— select bridge first —</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label></label>
+    <span id="pir-type-hint" style="color:#888; font-size:0.9em; display:none;"></span>
+  </div>
+  <div class="form-row" style="display:none">
+    <input type="text" id="node-input-typeId">
+    <input type="text" id="node-input-moduleName">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="velbus-pir">
+  <p>
+    PIR motion sensor node for Velbus original and -10 series modules.
+    For V2 (-20) series use <strong>velbus-pir-20</strong>.
+  </p>
+
+  <h3>Supported modules</h3>
+  <p>VMBPIRM (0x2A), VMBPIRC (0x2B), VMBPIRO (0x2C), VMBPIRO-10 (0x23).</p>
+  <p>VMBPIRO and VMBPIRO-10 include a temperature sensor — output 2 is active on these types.</p>
+
+  <h3>Output 1 — Channel / status / light</h3>
+  <p>Channel event (0x00):</p>
+  <pre>{
+  "type":        "channel",
+  "on":          true,
+  "pressed":     ["motion1", "dark"],
+  "released":    [],
+  "longPressed": []
+}</pre>
+  <p>Module status (0xED):</p>
+  <pre>{
+  "type":     "status",
+  "on":       true,
+  "channels": { "dark": false, "light": true, "motion1": true, ... },
+  "lightRaw": 1024,
+  "testMode": false,
+  "locked":   { "dark": false, ... },
+  "program":  "summer",
+  "alarms":   { "alarm1Active": false, "alarm2Active": false }
+}</pre>
+  <p>Light value (0xA9):</p>
+  <pre>{ "type": "light", "on": true, "raw": 1024 }</pre>
+
+  <h3>Output 2 — Temperature (VMBPIRO / VMBPIRO-10 only)</h3>
+  <pre>{ "type": "temperature", "current": 21.5, "min": 18.0, "max": 25.0 }</pre>
+  <p>Settings (0xE8):</p>
+  <pre>{ "type": "temp_settings", "calOffset": 0, "calGain": 128, "lowAlarm": 5.0, "highAlarm": 35.0, "zone": 0 }</pre>
+
+  <h3>Input commands</h3>
+  <dl>
+    <dt><code>{ "cmd": "get_status" }</code></dt><dd>Request module status (0xFA).</dd>
+    <dt><code>{ "cmd": "get_light", "interval": 30 }</code></dt><dd>Request light value. interval=0 means no change to auto-send setting.</dd>
+    <dt><code>{ "cmd": "get_temp" }</code></dt><dd>Request temperature (VMBPIRO/VMBPIRO-10 only).</dd>
+    <dt><code>{ "cmd": "get_temp_settings" }</code></dt><dd>Request temperature calibration and alarm settings.</dd>
+    <dt><code>{ "cmd": "test_on" }</code> / <code>{ "cmd": "test_off" }</code></dt><dd>Enable/disable test mode (30 minute timeout).</dd>
+  </dl>
+</script>
