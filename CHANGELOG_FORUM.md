@@ -14,6 +14,45 @@ All feedback via GitHub issues, with examples and debug captures where possible.
 
 ---
 
+## v0.9.1 — 08/07/2026
+
+### Address validation bug — 12 of 19 node types, any address ≥100 decimal
+
+- **Reported by Stuart:** adding a velbus-sensor node and selecting VMB4AN
+  from the scan dropdown showed a red "not configured correctly" triangle
+  no matter what was selected.
+- **Root cause:** every node using the `address` field (as opposed to
+  `moduleAddr`, used by relay/dimmer nodes, which were unaffected) validated
+  it against `/^(0x)?[0-9a-fA-F]{1,2}$/` — a pattern that only ever made
+  sense if `address` were stored as a 1-2 character hex string. But
+  `oneditsave` on every one of these nodes stores it as a plain decimal
+  **number** instead (`parseInt(...)`). Since regex `.test()` coerces its
+  argument to a string first, any address whose decimal representation is
+  1-2 digits (1-99) happened to accidentally still match — every digit
+  0-9 is also a valid hex character — masking the bug for low addresses.
+  Any address **100 or higher** (`0x64`+) produces a 3-digit decimal string,
+  which cannot match a `{1,2}`-length pattern, so validation always failed.
+  100-254 is a very ordinary real-world address range — this was a live,
+  fully user-facing bug, not an edge case.
+- **Affected nodes (12):** velbus-blind, velbus-blind-s, velbus-blind-20,
+  velbus-button, velbus-energy, velbus-glass-panel, velbus-meteo,
+  velbus-pir, velbus-pir-20, velbus-sensor, velbus-sensor-20,
+  velbus-thermostat. Confirmed relay/dimmer/relay-20/dimmer-20 (which use
+  `moduleAddr`, no custom validate function) and velbus-clock (no fixed
+  address at all) were never affected.
+- **Fix:** replaced the regex with a direct numeric range check
+  (`parseInt(v)` between 1 and 254 inclusive) — correct regardless of
+  whether the stored value is a number, a decimal string, or a legacy hex
+  string (`parseInt` auto-detects a `0x` prefix), so old saved flows keep
+  working unchanged.
+- Verified: syntax-checked the extracted JS from all 12 files, and
+  confirmed the corrected logic against the actual failing range (50/80/99
+  → true both before and after; 100/150/254 → **false before, true after**;
+  0/255/empty/non-numeric → false, correctly rejected as invalid addresses
+  both before and after).
+
+---
+
 ## v0.9.0 — 08/07/2026
 
 ### velbus-energy — new node (19th node), VMBPSUMNGR-20

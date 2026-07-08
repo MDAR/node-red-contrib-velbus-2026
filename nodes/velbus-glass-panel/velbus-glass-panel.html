@@ -135,7 +135,7 @@
     defaults: {
       name:         { value: '' },
       bridge:       { value: '', type: 'velbus-bridge', required: true },
-      address:      { value: '',  required: true, validate: function(v) { return /^(0x)?[0-9a-fA-F]{1,2}$/.test(v); } },
+      address:      { value: '',  required: true, validate: function(v) { const n = parseInt(v); return !isNaN(n) && n >= 1 && n <= 254; } },
       channelCount: { value: 4,   required: true, validate: RED.validators.number() },
       moduleName:   { value: '' },
       typeId:       { value: '' },
