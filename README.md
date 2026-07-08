@@ -85,6 +85,7 @@ npm install /path/to/node-red-contrib-velbus-2026_v0.8.1.tar.gz
 | `velbus-blind-s` | VMB1BLS, VMB2BLE, VMB2BLE-10 — full position, lock, force, inhibit |
 | `velbus-blind-20` | VMB2BLE-20 — V2 series with CAN FD support |
 | `velbus-clock` | No fixed module — broadcasts time/date/DST to bus address `0x00`, plus global/local clock alarm (V2 series only) |
+| `velbus-energy` | VMBPSUMNGR-20 — power supply manager: PSU load, live wattage/voltage/amperage, warranty counter, PSU alarms (V2 series only) |
 
 ---
 

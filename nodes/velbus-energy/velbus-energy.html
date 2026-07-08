@@ -1,0 +1,167 @@
+<script type="text/javascript">
+(function() {
+
+  const ENERGY_TYPES_20 = {
+    0x04: { name: 'VMBPSUMNGR-20', series: 'v2' },
+  };
+
+  RED.nodes.registerType('velbus-energy', {
+    category:  'Velbus (inputs)',
+    color:     '#3A8C8C',
+    defaults: {
+      name:       { value: '' },
+      bridge:     { value: '', type: 'velbus-bridge', required: true },
+      address:    { value: '', required: true, validate: function(v) { return /^(0x)?[0-9a-fA-F]{1,2}$/.test(v); } },
+      moduleName: { value: '' },
+      typeId:     { value: '' },
+    },
+    inputs:  1,
+    outputs: 2,
+    outputLabels: ['status / alarm / warranty / psu load', 'psu values (per rail)'],
+    icon:    'font-awesome/fa-plug',
+    paletteLabel: 'energy',
+
+    label: function() {
+      const t = this.typeId ? ENERGY_TYPES_20[parseInt(this.typeId, 16)] : null;
+      const n = this.name || this.moduleName || (t ? t.name : 'energy');
+      return n + ' 0x' + (parseInt(this.address) || 0).toString(16).padStart(2,'0').toUpperCase();
+    },
+
+    oneditprepare: function() {
+      const savedAddr = this.address;
+      $('#node-input-typeId').prop('readonly', true).css('background', '#f0f0f0');
+
+      function populateDropdown(bridgeId) {
+        if (!bridgeId) return;
+        $.getJSON('velbus/scan-results?bridge=' + bridgeId, function(results) {
+          const modules = (results && results.modules) ? results.modules : [];
+          const $addr = $('#node-input-address');
+          $addr.empty().append($('<option>').val('').text('— select address —'));
+
+          const typeIds = Object.keys(ENERGY_TYPES_20).map(k => parseInt(k));
+          const filtered = modules.filter(m => typeIds.includes(parseInt(m.typeId, 16)));
+
+          if (!filtered.length) {
+            $addr.append($('<option>').val('').text('No power supply manager modules found on bus'));
+            return;
+          }
+          filtered.forEach(function(m) {
+            const tid   = parseInt(m.typeId, 16);
+            const label = m.address + ' — ' + m.module;
+            const $opt  = $('<option>').val(m.addressDec).text(label).data('typeid', tid);
+            if (m.addressDec === parseInt(savedAddr)) $opt.attr('selected', true);
+            $addr.append($opt);
+          });
+          if (savedAddr) {
+            const $opt = $('#node-input-address option[value="' + parseInt(savedAddr) + '"]');
+            const tid = $opt.data('typeid');
+            if (tid) {
+              $('#energy-type-hint').text(ENERGY_TYPES_20[tid].name + ' · PSU1/PSU2/PSUOut monitoring').show();
+              $('#node-input-typeId').val('0x' + tid.toString(16).padStart(2,'0').toUpperCase());
+            }
+          }
+        });
+      }
+
+      $('#node-input-bridge').on('change', function() { populateDropdown($(this).val()); });
+      $('#node-input-address').on('change', function() {
+        const tid = $(this).find(':selected').data('typeid');
+        if (tid && ENERGY_TYPES_20[tid]) {
+          $('#energy-type-hint').text(ENERGY_TYPES_20[tid].name + ' · PSU1/PSU2/PSUOut monitoring').show();
+          $('#node-input-typeId').val('0x' + tid.toString(16).padStart(2,'0').toUpperCase());
+        }
+      });
+
+      $('#node-input-bridge').trigger('change');
+      setTimeout(function() { $('#node-input-bridge').trigger('change'); }, 150);
+    },
+
+    oneditsave: function() {
+      this.address = parseInt($('#node-input-address').val()) || 0;
+      const tid = $('#node-input-typeId').val();
+      this.typeId = tid || '';
+      if (tid) {
+        const t = ENERGY_TYPES_20[parseInt(tid, 16)];
+        if (t) this.moduleName = t.name;
+      }
+    },
+  });
+
+})();
+</script>
+
+<script type="text/html" data-template-name="velbus-energy">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Optional label">
+  </div>
+  <div class="form-row">
+    <label for="node-input-bridge"><i class="fa fa-plug"></i> Bridge</label>
+    <input type="text" id="node-input-bridge">
+  </div>
+  <div class="form-row">
+    <label for="node-input-address"><i class="fa fa-map-marker"></i> Address</label>
+    <select id="node-input-address" style="width:70%">
+      <option value="">— select bridge first —</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label></label>
+    <span id="energy-type-hint" style="color:#888; font-size:0.9em; display:none;"></span>
+  </div>
+  <div class="form-row" style="display:none">
+    <input type="text" id="node-input-typeId">
+    <input type="text" id="node-input-moduleName">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="velbus-energy">
+  <p style="background:#fff3cd; border-left:4px solid #ffc107; padding:8px 12px; margin-bottom:12px; font-size:0.85em;">
+  <strong>&#9888; Testing status:</strong> This node was generated with Claude.ai and is in
+  need of extensive field testing before being deployed into a commercial project.
+  It is presented "as is" &mdash; any use beyond testing is entirely at your own risk and liability.
+  Constructive feedback is welcomed, accompanied by as many examples and debug captures as possible.
+  <a href="https://github.com/MDAR/node-red-contrib-velbus-2026/issues" target="_blank">File an issue on GitHub</a>.
+  </p>
+  <p><strong>Verified only against a mock test harness, not yet against real hardware</strong> — no
+  VMBPSUMNGR-20 has been confirmed present on a scanned bus yet. Packet checksums, DLC, and field
+  layout have been hand-verified against the protocol PDF; the actual real-hardware byte layout has
+  not been independently confirmed. See this project's <code>HANDOVER.md</code> for detail.</p>
+
+  <p>V2 power supply manager node for VMBPSUMNGR-20 (0x04). Monitors up to two power supplies
+  (PSU1, PSU2) feeding a combined output (PSUOut) &mdash; load percentages, live wattage/voltage/
+  amperage per rail, a warranty counter (hours in operation), and PSU/warranty alarm status.</p>
+  <p>This is a monitoring-only module &mdash; there's no per-channel I/O configuration the way
+  most other nodes in this palette have.</p>
+
+  <h3>Output 1 — Status / alarm / warranty / PSU load</h3>
+  <p>Alarm event (0x00 &mdash; fires immediately on change):</p>
+  <pre>{ "type": "alarm", "on": true, "alarms": {
+  "psu1Offline": false, "psu2Offline": true, "warrantyExpired": false,
+  "psu1Alarm1": false, "psu2Alarm1": false, "psuOutAlarm1": false,
+  "psu1Alarm2": false, "psu1Alarm3": false, "psu1Alarm4": false,
+  "psu2Alarm2": false, "psu2Alarm3": false, "psu2Alarm4": false,
+  "psuOutAlarm2": false } }</pre>
+  <p>Module status (0xED &mdash; the same alarm bitmasks as above, plus load and program info in one packet):</p>
+  <pre>{ "type": "status", "on": false, "alarms": { ... },
+  "psu1Load": 45, "psu2Load": 50, "psuOutLoad": 48, "program": "group1",
+  "clockAlarms": { "alarm1": { "on": true, "global": false },
+                   "alarm2": { "on": false, "global": false } },
+  "sunrise": false, "sunset": false, "autoSendInterval": 60 }</pre>
+  <p>Warranty counter (0xA1):</p>
+  <pre>{ "type": "warranty", "hours": 5000, "expired": false, "limitHours": 87660, "on": false }</pre>
+  <p>PSU load status (0xA2):</p>
+  <pre>{ "type": "psu_load", "mode": "boost", "psu1Load": 60, "psu2Load": 70, "psuOutLoad": 65 }</pre>
+
+  <h3>Output 2 — PSU values (0xA3, one message per rail)</h3>
+  <pre>{ "type": "psu_values", "channel": 2, "channelName": "PSU2",
+  "wattageMW": 50000, "voltageMV": 24000, "amperageMA": 2100,
+  "watts": 50, "volts": 24, "amps": 2.1 }</pre>
+
+  <h3>Input commands</h3>
+  <dl>
+    <dt><code>{ "cmd": "get_status" }</code></dt><dd>Request module status.</dd>
+    <dt><code>{ "cmd": "get_warranty" }</code></dt><dd>Request the warranty/hours-in-operation counter.</dd>
+    <dt><code>{ "cmd": "get_name", "channel": 1 }</code></dt><dd>Request channel name (1-10, 255=all).</dd>
+  </dl>
+</script>

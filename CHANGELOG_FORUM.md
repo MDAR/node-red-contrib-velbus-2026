@@ -14,6 +14,48 @@ All feedback via GitHub issues, with examples and debug captures where possible.
 
 ---
 
+## v0.9.0 — 08/07/2026
+
+### velbus-energy — new node (19th node), VMBPSUMNGR-20
+
+- **Closes the last "not yet built" item on the module registry** —
+  VMBPSUMNGR-20 (0x04), the power-supply-manager module, following the same
+  V2 architectural pattern as `velbus-sensor-20` (firmware/type check, name
+  auto-retrieval, standard startup RTR).
+- Handles: `0xED` module status (PSU load %ages, alarm bitmasks, shared
+  program/clock-alarm/sunrise/sunset byte), `0x00` real-time alarm events
+  (arrives via primary address as one bitmask, via sub-address1 as a second
+  bitmask — same command, discriminated by source address, merged into
+  running alarm state so a partial update never discards the other half),
+  `0xA1` warranty counter (31-bit hours-in-operation + expired flag, packed
+  across 4 bytes), `0xA2` PSU load status (mode + 3 load percentages), `0xA3`
+  PSU values (wattage/voltage/amperage per rail, one message per PSU/PSUOut).
+- **Does not reimplement the shared V2 "system" commands** (real-time clock,
+  date, DST, sunrise/sunset, clock alarm) present throughout this PDF —
+  `velbus-clock` already owns broadcasting those; duplicating them here
+  would just be dead weight.
+- **Two real errors found in Velbus's own protocol PDF while implementing
+  this, both documented in the node's source comments:**
+  - The document header reads "VMB8IN-20 PROTOCOL" throughout — an
+    un-retitled template artifact from a different module's document.
+  - The `0xA3` (PSU values status) section labels three different byte
+    positions all as "DATABYTE6" (voltage high, amperage high, amperage
+    low) — internally inconsistent with its own stated 8-byte length.
+    Reconstructed from the byte count as DATABYTE5/6 = voltage hi/lo,
+    DATABYTE7/8 = amperage hi/lo. Same category as the temperature-divisor
+    and build-number-mislabelling issues already known elsewhere in this
+    project — worth remembering if re-checking against the source PDF.
+- Verified with the mock-RED harness: every packet type (module type
+  identification, both alarm bitmask sources, module status, warranty
+  counter, PSU load, PSU values, name assembly across all three name-part
+  commands) exercised with hand-checked checksums; outgoing commands
+  (`get_status`, `get_warranty`, `get_name`) checksum-verified by hand
+  against the actual bytes produced. **Not yet sent to a real bus** — no
+  VMBPSUMNGR-20 has been confirmed present on a scanned bus yet (see the
+  handover's outstanding-verification notes).
+
+---
+
 ## v0.8.1 — 07/07/2026
 
 ### velbus-clock — set_alarm command (global + local, one command)
