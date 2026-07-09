@@ -142,6 +142,7 @@
   "on":             true,
   "level":          75,
   "percent":        75.0,
+  "ledState":       "off",
   "timerRemaining": 0,
   "thermal": {
     "tempBand": 0,
@@ -151,6 +152,14 @@
   "timestamp": 1719100000000
 }
   </pre>
+  <p><code>state</code> is <code>"on"</code>/<code>"off"</code> during normal running
+  (purely determined by dim level), or one of <code>"inhibited"</code>/
+  <code>"forced_on"</code>/<code>"disabled"</code> when an override is active — these
+  come from the module's own status report, confirmed against the protocol PDF as a
+  single combined status byte, not independent states. There is no separate
+  <code>"forced_off"</code> status — sending the <code>forced_off</code> command below
+  is a real, distinct command, but the module reports its result via the same
+  normal/inhibited/forced_on/disabled status set.</p>
 
   <h3>Input — Commands</h3>
   <pre>

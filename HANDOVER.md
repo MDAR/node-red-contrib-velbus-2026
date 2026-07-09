@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.10.0, 19 nodes, published on npm.**
+Current state at time of writing: **v0.10.1, 19 nodes, published on npm.**
 
 ---
 
@@ -528,6 +528,36 @@ body[6] = error bitmask
 body[7] = alarm/program byte
 ```
 
+### 7.5a `0xB8` dimmer status — original series (VMBDMI, VMBDMI-R, VMB4DC)
+
+**Not the same shape as 7.5 above, despite both being "dimmer status."**
+Confirmed identical across all three original-series protocol PDFs — one
+combined status byte, not separate mode/status bytes the way relay modules
+or the V2 dimmer status have:
+```
+body[0] = 0xB8
+body[1] = channel (VMBDMI/-R: always 0x01; VMB4DC: bitmask)
+body[2] = status byte — MULTIPLE bit-fields packed together:
+            bits 0-1: run mode (00=normal, 01=inhibited, 10=forced_on, 11=disabled)
+            bits 2-3: error (VMBDMI/-R only — VMB4DC has no thermal section at all)
+            bit 4:    load type (VMBDMI/-R only: 0=resistive, 1=inductive)
+            bits 5-7: temperature band (VMBDMI/-R only, 8 levels)
+body[3] = dim value (0-100%)
+body[4] = LED indicator status ONLY — unrelated to run state (0x00 off,
+          0x80 on, 0x40 slow blink, 0x20 fast blink, 0x10 very fast blink)
+body[5-7] = 24-bit current delay time, MSB first
+```
+There is no separate `"forced_off"` status — that's a real, distinct
+*command* (0x12) you can send, but the module reports its result through
+the same four-value run-mode set above, same as relay's forced/inhibited
+pattern conceptually, but packed into one byte here rather than two.
+`on` is true for `forced_on`, or for `normal` mode with a nonzero dim
+value — **not** simply "mode equals the literal string on," which was the
+real bug (v0.10.1): a dimmer in ordinary normal-running mode — by far the
+most common real-world state — was being read as `off` regardless of dim
+level, because the code checked the LED status byte's low bits for
+confirmation instead of using the dim value directly.
+
 ### 7.6 `0xA5` dim level — up to four channels packed per packet
 ```
 body[0] = 0xA5, body[1] = channel, body[2] = level (0-254)
@@ -812,6 +842,17 @@ orientation at the time of writing:
   `VMBGPOD` (0x28) specifically confirmed 09/07/2026 against two real panels on
   Stuart's own home bus, closing out the v0.9.2/v0.9.3 registry-gap saga with an
   actual result rather than just a passing test.
+- **`velbus-dimmer`'s `0xB8` status decode was fundamentally wrong from when it was
+  first written until v0.10.1** — see section 7.5a. A dimmer in ordinary "normal
+  running" mode always reported `off` regardless of actual dim level. Fixed and
+  verified via the mock harness against the exact reported scenario, but not yet
+  re-confirmed against Stuart's real VMBDMI.
+- **`velbus-glass-panel`'s `0xEA` thermostat status has been silently crashing
+  since it was written, until v0.10.1** — see section 16's code style rules for
+  the full story. The `type:"thermostat"` payload has likely never once been
+  successfully delivered for any real thermostat-equipped panel. Fixed and swept
+  for the same pattern elsewhere in the file (none found), but not yet
+  re-confirmed against Stuart's real hardware.
 - **`velbus-button` had a critical, real bug from its first version until v0.9.4** —
   see section 4.3 for the full story. Its press/release/long-press decode is now
   fixed and verified with a real repro, but has not yet been re-confirmed against a
@@ -1004,6 +1045,31 @@ git push --tags
   Velbus type byte at all, and `0x20`, which actually belongs to `VMBGP4`) — while
   `velbus-scan.js` had always had the correct values. Cross-check against the
   official type list (section 15) periodically, not just when adding something new.
+- **Never reference a variable that was only ever assigned as an object property.**
+  Real bug, live since the code was written (fixed v0.10.1): `velbus-glass-panel`'s
+  `0xEA` handler built `currentTemp`/`targetTemp` only inside a `payload = {...}`
+  object literal, then referenced them as bare identifiers on the very next line
+  (`setStatus('...' + currentTemp.toFixed(1) + ...)`). Since JS evaluates a
+  function's arguments before calling it, this threw a `ReferenceError` *before*
+  `node.send()` on the following line — meaning the entire payload silently never
+  went out, for as long as this code existed. The bridge's own dispatch-error
+  handling caught the exception each time rather than crashing the process, which
+  is exactly what let this go unnoticed rather than being immediately obvious.
+  If a value is going into both a status/log string and a payload object, declare
+  it as its own `const` first and use that name in both places — never build it
+  only inside the object literal and assume you can reference it by name outside.
+- **Don't assume a "two-byte status" pattern applies to every module family.**
+  Real bug, live since the code was written (fixed v0.10.1): the original-series
+  dimmer's `0xB8` status was assumed to work like relay's genuine separate
+  mode-byte + status-byte pair. In reality `VMBDMI`/`VMBDMI-R`/`VMB4DC` pack
+  run-mode, error, load-type, and temperature into a *single* status byte
+  (confirmed identical across all three protocol PDFs — see section 7.5a), and
+  the code was additionally reading the LED indicator byte as if it were a second
+  status word. The result: a dimmer in ordinary "normal running" mode — the most
+  common real-world state — always reported `off` regardless of actual dim level.
+  Same underlying lesson as the button-family capability work: check each
+  module's own protocol document for its actual byte layout, don't port a pattern
+  from a different (even superficially similar) module family.
 - **Thermostat commands go to the primary address only,** never a subaddress.
 - **Respect the 20ms minimum between `0xFC` writes** on original-series modules — this
   is real EEPROM wear, not an arbitrary rate limit.

@@ -29,6 +29,59 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.10.1 — 09/07/2026
+
+### Two critical bugs found on real hardware — velbus-dimmer and velbus-glass-panel
+
+**velbus-dimmer — `on`/`state` always wrong for original-series dimmers.**
+Reported by Stuart: a VMBDMI at 75% dim showing `state:"off"`, `on:false`.
+Root cause was a genuine misunderstanding of the protocol, not a small
+off-by-one: `0xB8`'s `DATABYTE3` packs run-mode, error, load-type, and
+temperature band **all into one status byte** (confirmed identical across
+`protocol_vmbdmi.pdf`, `protocol_vmbdmi_r.pdf`, and `protocol_vmb4dc.pdf`).
+The previous code treated this as if it were a separate mode-byte +
+status-byte pair (the way relay modules genuinely have), and additionally
+read `DATABYTE5` (LED indicator status — real values `0x00`/`0x80`/`0x40`/
+`0x20`/`0x10`) as a second status word, checking its low 2 bits for
+confirmation. Since none of the real LED status values have those bits
+set, a dimmer in ordinary "normal running" mode — the overwhelmingly
+common case — always fell through to `'off'`, regardless of actual dim
+level. Also fixed in the same pass: the 24-bit current-delay timer was
+being read as only 16 bits from the wrong byte offset, and `decodeThermal`
+was being called on the LED byte instead of the real status byte (explains
+why `thermal` always showed all zeros in the field report). `ledState` is
+now correctly decoded and added to the payload. Verified against the exact
+reported scenario plus inhibited/forced_on/disabled/thermal-alarm cases,
+with the bit-field math for the packed status byte hand-checked.
+
+**velbus-glass-panel — `0xEA` thermostat status has been silently crashing
+since it was written.** Reported by Stuart via a `"velbus-bridge dispatch
+error: currentTemp is not defined"` message appearing repeatedly while
+testing a VMBGP2. Root cause: `currentTemp` and `targetTemp` were only ever
+assigned as properties of the `payload` object literal, never declared as
+their own variables — but the very next line referenced them as bare
+identifiers in the `setStatus(...)` call. Because JS evaluates a function's
+arguments before calling it, this threw a `ReferenceError` before
+`node.send()` on the following line ever executed. **This means the
+`type:"thermostat"` payload has likely never once been successfully
+delivered for any thermostat-equipped glass panel** — the bridge's
+dispatch-error handling caught the exception each time rather than
+crashing the whole process, which is exactly why this went unnoticed for
+so long rather than being immediately obvious. Fixed by declaring both as
+proper local `const`s before use. Did a full sweep of every other packet
+case in this file (button, module status, temperature, light sensor, memo
+text, counter, name parts) via the mock harness afterward, specifically
+exercising the OLED- and PIR-gated branches too — no other instances
+found. Also swept every other node file for the same bare-identifier
+`.toFixed()` pattern that caused this — one other match (`velbus-meteo`)
+checked and confirmed already correct (properly prefixed with `payload.`).
+
+Both verified via the mock-RED harness against the exact reported symptoms
+before and after the fix — not just re-reading the corrected code. Not yet
+re-confirmed on Stuart's real hardware.
+
+---
+
 ## v0.10.0 — 09/07/2026
 
 ### Coverage roadmap implementation — 9 new module types, velbus-button overhaul, velbus-clock sunrise/sunset

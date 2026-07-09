@@ -254,11 +254,13 @@ module.exports = function(RED) {
           // Signed 0.5° resolution: raw byte is two's complement
           const rawCurrent = body[4] > 127 ? body[4] - 256 : body[4];
           const rawTarget  = body[5] > 127 ? body[5] - 256 : body[5];
+          const currentTemp = rawCurrent * 0.5;
+          const targetTemp  = rawTarget  * 0.5;
 
           const payload = {
             type:        'thermostat',
-            currentTemp: rawCurrent * 0.5,
-            targetTemp:  rawTarget  * 0.5,
+            currentTemp,
+            targetTemp,
             mode,
             heaterMode,
             heating,

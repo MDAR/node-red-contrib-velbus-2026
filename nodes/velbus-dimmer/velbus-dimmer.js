@@ -56,27 +56,46 @@ module.exports = function(RED) {
       node.status({ fill: fill || 'grey', shape: shape || 'dot', text });
     }
 
-    // Original series: dim value is 0-100 integer percentage
-    function decodeModeStatus(modeByte, statusByte) {
-      const mode = modeByte & 0x03;
-      if (mode === 0x03) return 'forced_off';
-      if (mode === 0x02) return 'forced_on';
-      if (mode === 0x01) return 'inhibited';
-      const s = statusByte & 0x03;
-      if (s === 0x03) return 'timer_running';
-      if (s === 0x01) return 'on';
-      return 'off';
+    // Original series VMBDMI/VMBDMI-R/VMB4DC: 0xB8's DATABYTE3 packs
+    // MULTIPLE bit-fields into ONE status byte — confirmed from all three
+    // protocol PDFs, NOT a separate mode+status byte pair the way relay
+    // modules genuinely have. DATABYTE5 (LED status) is an indicator light
+    // only, completely unrelated to run state.
+    //   bits 0-1: run mode (00=normal, 01=inhibited, 10=forced_on, 11=disabled)
+    //   bits 2-3: error (VMBDMI/-R only — VMB4DC's DATABYTE3 has no thermal
+    //             bits at all, confirmed from its own PDF)
+    //   bit 4:    load type (VMBDMI/-R only: 0=resistive, 1=inductive)
+    //   bits 5-7: temp band (VMBDMI/-R only, 8 levels)
+    //
+    // BUG FIXED 09/07/2026 (reported by Stuart: VMBDMI at 75% dim showing
+    // state:"off", on:false): the previous implementation read DATABYTE5
+    // (LED status — real values 0x00/0x80/0x40/0x20/0x10) as if it were a
+    // second status word, and checked its low 2 bits to help decide on/off.
+    // Since none of the real LED status values have those bits set, a
+    // module in ordinary "normal running" mode — by far the most common
+    // case — always fell through to 'off' regardless of actual dim level.
+    function decodeRunMode(statusByte) {
+      const m = statusByte & 0x03;
+      if (m === 0x01) return 'inhibited';
+      if (m === 0x02) return 'forced_on';
+      if (m === 0x03) return 'disabled';
+      return 'normal';
     }
 
     function decodeThermal(statusByte) {
-      // bits 4-5: temp band (0=normal, 1=warm, 2=hot, 3=very hot)
-      // bit 3: load type (0=leading edge, 1=trailing edge)
-      // bits 1-2: error bits
       return {
-        tempBand: (statusByte >> 4) & 0x03,
-        loadType: (statusByte >> 3) & 0x01,
-        error:    (statusByte >> 1) & 0x03
+        tempBand: (statusByte >> 5) & 0x07,
+        loadType: (statusByte >> 4) & 0x01,
+        error:    (statusByte >> 2) & 0x03
       };
+    }
+
+    function decodeLed(ledByte) {
+      if (ledByte & 0x80) return 'on';
+      if (ledByte & 0x40) return 'slow_blink';
+      if (ledByte & 0x20) return 'fast_blink';
+      if (ledByte & 0x10) return 'very_fast_blink';
+      return 'off';
     }
 
     // ── Name retrieval ────────────────────────────────────────────────────
@@ -215,20 +234,26 @@ module.exports = function(RED) {
       }
 
       // ── 0xB8 Dimmer status (original series) ─────────────────────────
-      // byte 1: cmd (0xB8)
-      // byte 2: channel bit (VMBDMI/R: 0x01; VMB4DC: bitmask)
-      // byte 3: mode/status byte
-      // byte 4: dim value 0-100
-      // byte 5: status byte 2 (VMBDMI/R: thermal; VMB4DC: unused)
-      // bytes 6-7: timer high/low (16-bit seconds)
-      if (cmd === 0xB8 && body.length >= 5) {
+      // byte 0: cmd (0xB8)
+      // byte 1: channel bit (VMBDMI/R: always 0x01; VMB4DC: bitmask)
+      // byte 2: status byte (run mode + thermal/error/load bits packed together)
+      // byte 3: dim value 0-100
+      // byte 4: LED indicator status (NOT part of run state — see decodeLed)
+      // bytes 5-7: 24-bit current delay time (DATABYTE6/7/8, MSB first)
+      if (cmd === 0xB8 && body.length >= 8) {
         const typeInfo   = _moduleInfo;
         const chByte     = body[1];
-        const modeByte   = body[2];
-        const dimValue   = body[3]; // 0-100
-        const statusByte = body[4];
-        const timerSec   = body.length >= 7 ? ((body[5] << 8) | body[6]) : 0;
-        const relayState = decodeModeStatus(modeByte, statusByte);
+        const statusByte = body[2];
+        const dimValue   = body[3];
+        const ledByte    = body[4];
+        const timerSec   = (body[5] << 16) | (body[6] << 8) | body[7];
+
+        const runMode = decodeRunMode(statusByte);
+        // 'normal' resolves to on/off purely from dim value; the other
+        // three modes are reported as themselves, same as relay's pattern.
+        const relayState = runMode === 'normal' ? (dimValue > 0 ? 'on' : 'off') : runMode;
+        const on = relayState === 'on' || relayState === 'forced_on';
+        const ledState = decodeLed(ledByte);
 
         if (typeInfo && typeInfo.channelModel === 'single') {
           // VMBDMI / VMBDMI-R — single channel, chByte always 0x01
@@ -237,15 +262,16 @@ module.exports = function(RED) {
 
           const thermal = typeInfo.hasThermal ? decodeThermal(statusByte) : null;
           _channelState[ch] = {
-            on:           dimValue > 0 && relayState === 'on',
+            on,
             level:        dimValue,
             percent:      dimValue * 1.0,
             relayState,
+            ledState,
             timerRemaining: timerSec,
             thermal
           };
 
-          const isWarning = ['forced_on', 'forced_off', 'inhibited'].includes(relayState);
+          const isWarning = ['forced_on', 'inhibited', 'disabled'].includes(relayState);
           setStatus(statusPrefix() + ' ' + (dimValue > 0 ? dimValue + '%' : 'off'),
             isWarning ? 'yellow' : (dimValue > 0 ? 'green' : 'grey'));
 
@@ -255,9 +281,10 @@ module.exports = function(RED) {
             module:         displayName(),
             channel:        ch,
             state:          relayState,
-            on:             dimValue > 0 && relayState === 'on',
+            on,
             level:          dimValue,
             percent:        dimValue * 1.0,
+            ledState,
             timerRemaining: timerSec,
             thermal,
             timestamp:      Date.now()
@@ -271,7 +298,9 @@ module.exports = function(RED) {
           }} : null]);
 
         } else {
-          // VMB4DC — chByte is a bitmask
+          // VMB4DC — chByte is a bitmask. No thermal reporting at all for
+          // this type — confirmed from its own protocol PDF, DATABYTE3 only
+          // has the run-mode bits, no error/load-type/temp-band section.
           for (let i = 0; i < 4; i++) {
             const b  = 1 << i;
             const ch = i + 1;
@@ -279,14 +308,15 @@ module.exports = function(RED) {
             if (ch < node.startChannel || ch >= node.startChannel + node.channelCount) continue;
 
             _channelState[ch] = {
-              on:      dimValue > 0 && relayState === 'on',
+              on,
               level:   dimValue,
               percent: dimValue * 1.0,
               relayState,
+              ledState,
               timerRemaining: timerSec
             };
 
-            const isWarning = ['forced_on', 'forced_off', 'inhibited'].includes(relayState);
+            const isWarning = ['forced_on', 'inhibited', 'disabled'].includes(relayState);
             setStatus(statusPrefix() + ' ch' + ch + ' ' + (dimValue > 0 ? dimValue + '%' : 'off'),
               isWarning ? 'yellow' : (dimValue > 0 ? 'green' : 'grey'));
 
@@ -296,9 +326,10 @@ module.exports = function(RED) {
               module:         displayName(),
               channel:        ch,
               state:          relayState,
-              on:             dimValue > 0 && relayState === 'on',
+              on,
               level:          dimValue,
               percent:        dimValue * 1.0,
+              ledState,
               timerRemaining: timerSec,
               timestamp:      Date.now()
             }}, isWarning ? { payload: {
