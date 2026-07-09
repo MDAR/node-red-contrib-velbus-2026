@@ -14,6 +14,41 @@ All feedback via GitHub issues, with examples and debug captures where possible.
 
 ---
 
+## v0.9.3 — 09/07/2026
+
+### velbus-scan — VMBGPOD still showed "unknown_0x28" after the v0.9.2 fix
+
+- **Reported by Stuart:** re-ran a scan against v0.9.2 pulled fresh from npm,
+  `VMBGPOD` still showed as `unknown_0x28`.
+- **Root cause:** `velbus-scan.js` has its **own, third, independent copy**
+  of the type table — `ALL_TYPES`, `NODE_SUGGESTION`, and `MODULE_CHANNELS`
+  — entirely separate from `lib/glass-panel-types.js` (used by
+  `velbus-glass-panel` at runtime) and the duplicate list inside
+  `velbus-glass-panel.html` (used for the editor dropdown), both already
+  fixed in v0.9.2. The v0.9.2 fix genuinely worked for the glass-panel node
+  itself; the bus scanner simply had no idea `VMBGPOD` existed, since it
+  never reads either of the other two files at all.
+- **This is now the third type table found in this codebase.** Searched
+  exhaustively this time (`grep -rln "VMBGPO'"` across the whole `nodes/`
+  and `lib/` tree) rather than assume these three are the only ones — they
+  are, confirmed by the search coming back with exactly these three files
+  and no others.
+- Added `0x28: 'VMBGPOD'` to all three tables in `velbus-scan.js`.
+- **Verified end-to-end this time, not just by inspecting the table.** Built
+  a full mock-harness test that triggers a real scan, feeds a simulated
+  `0xFF` response for `VMBGPOD` (using the exact build/serial from Stuart's
+  own scan output), and confirms the emitted `module_found` payload reports
+  `"module":"VMBGPOD"`, the correct suggested node, and the correct channel
+  count — not just that the table lookup would theoretically work.
+- **Worth remembering for any future module type addition:** check all
+  three of `lib/<family>-types[-20].js`, the corresponding node's own
+  `.html` (editor dropdown), and `velbus-scan.js` (bus-wide discovery).
+  Missing any one of the three produces a real, user-visible symptom in a
+  different part of the palette than wherever the fix was actually made —
+  exactly what happened here.
+
+---
+
 ## v0.9.2 — 09/07/2026
 
 ### velbus-glass-panel — VMBGPOD (0x28) registry gap fixed

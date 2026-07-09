@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.9.2, 19 nodes, published on npm.**
+Current state at time of writing: **v0.9.3, 19 nodes, published on npm.**
 
 ---
 
@@ -143,6 +143,24 @@ examples/
 boilerplate (bridge lookup, packet registration, status bar handling, firmware check for
 V2 nodes) is consistent across every node and easy to get subtly wrong if rebuilt from
 scratch.
+
+**Adding or fixing a module type touches three separate files, not one — confirmed
+the hard way (v0.9.2 → v0.9.3).** A module type used to exist in exactly one place per
+node family; it doesn't. Check all three every time:
+1. `lib/<family>-types[-20].js` — used by the actual node at runtime (`velbus-glass-panel`,
+   `velbus-sensor`, etc.)
+2. The corresponding node's own `.html` file — a **separate, duplicate** copy used only
+   to populate the editor's address dropdown and type hint. Not read by the running node
+   at all.
+3. `nodes/velbus-scan/velbus-scan.js` — has its **own, third, entirely independent** copy
+   (`ALL_TYPES`, `NODE_SUGGESTION`, `MODULE_CHANNELS`), used only for bus-discovery
+   reporting. Doesn't read either of the other two files.
+
+Missing any one of the three produces a real, user-visible symptom in a *different* part
+of the palette than wherever the fix actually needs to happen — a scan reporting
+`unknown_0x28` while the glass-panel node itself handles that type perfectly correctly,
+for instance. When in doubt, `grep -rln "<ModuleName>'" nodes/ lib/` to find every file
+that mentions a given type by name, rather than assume you've found all the copies.
 
 ---
 
@@ -894,6 +912,10 @@ git push --tags
   exceptions — see section 4.3 if this isn't already second nature.
 - **Numbers are always numbers in payloads, never strings.**
 - **`results.modules`, not `results`,** when reading the scan endpoint.
+- **A module type lives in three separate files, not one** (per-node `lib/` registry,
+  that node's own `.html` dropdown copy, and `velbus-scan.js`'s independent copy) —
+  see section 3 for the full explanation. Missing one produces a symptom in a
+  different part of the palette than wherever the type was actually added.
 - **Thermostat commands go to the primary address only,** never a subaddress.
 - **Respect the 20ms minimum between `0xFC` writes** on original-series modules — this
   is real EEPROM wear, not an arbitrary rate limit.

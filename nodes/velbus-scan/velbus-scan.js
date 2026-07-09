@@ -21,6 +21,7 @@ const ALL_TYPES = {
   // Glass panels - original
   0x1E: 'VMBGP1',      0x1F: 'VMBGP2',      0x20: 'VMBGP4',
   0x21: 'VMBGPO',      0x2D: 'VMBGP4PIR',
+  0x28: 'VMBGPOD',
   0x34: 'VMBEL1',      0x35: 'VMBEL2',        0x36: 'VMBEL4',
   0x37: 'VMBELO',      0x38: 'VMBELPIR',      0x39: 'VMBSIG',
   0x47: 'VMBEL2PIR',
@@ -78,6 +79,7 @@ const NODE_SUGGESTION = {
   // Glass panels - all via single node
   0x1E: 'velbus-glass-panel', 0x1F: 'velbus-glass-panel', 0x20: 'velbus-glass-panel',
   0x21: 'velbus-glass-panel', 0x2D: 'velbus-glass-panel',
+  0x28: 'velbus-glass-panel',
   0x34: 'velbus-glass-panel', 0x35: 'velbus-glass-panel', 0x36: 'velbus-glass-panel',
   0x37: 'velbus-glass-panel', 0x38: 'velbus-glass-panel', 0x47: 'velbus-glass-panel',
   0x3A: 'velbus-glass-panel', 0x3B: 'velbus-glass-panel', 0x3C: 'velbus-glass-panel',
@@ -114,6 +116,7 @@ const MODULE_CHANNELS = {
   // Glass panels - original
   0x1E: 1,  0x1F: 2,  0x20: 4,
   0x21: 32, 0x2D: 8,
+  0x28: 4,
   0x34: 1,  0x35: 2,  0x36: 4,
   0x37: 4,  0x38: 8,  0x47: 6,
   0x3A: 1,  0x3B: 2,  0x3C: 4,
