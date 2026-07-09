@@ -904,6 +904,3 @@ Node-RED palette. Protocol reverse-engineering and verification work throughout 
 project has drawn on the official Velbus protocol repositories, the Velbus community
 forum, and cross-referencing against other independent open-source Velbus integrations
 — see [section 15](#15-where-to-find-protocol-references) for specific links.
-.
-- **Thermostat commands go to the primary address only,** never a subaddress.
-- **Respect the 20ms minimum between `0xFC` writes** on original-series modules
