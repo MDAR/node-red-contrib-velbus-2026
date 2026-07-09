@@ -14,6 +14,21 @@ All feedback via GitHub issues, with examples and debug captures where possible.
 
 ---
 
+## Field-confirmed — 09/07/2026
+
+**v0.9.3 confirmed working against real hardware** (Stuart, his own home
+installation). Both real VMBGPOD panels present on the bus (addresses 0x05
+and 0x18/0x2C) now report correctly — `"module":"VMBGPOD"`, correct
+suggested node, correct channel count — where a rescan previously showed
+`unknown_0x28` twice. The only remaining unknown in the same scan is
+`unknown_0x42` (VMBKP, address 0xFD on Stuart's bus) — expected and correct,
+since that module genuinely has no node built yet. This closes out the
+VMBGPOD saga (v0.9.2 → v0.9.3) with an actual confirmed result, not just
+passing tests — worth the distinction given how much back-and-forth two
+separate duplicate-table bugs took to fully resolve.
+
+---
+
 ## v0.9.3 — 09/07/2026
 
 ### velbus-scan — VMBGPOD still showed "unknown_0x28" after the v0.9.2 fix

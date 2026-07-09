@@ -775,6 +775,9 @@ orientation at the time of writing:
 
 - **Field-tested against live hardware:** the core relay, dimmer, glass panel, and
   thermostat nodes have real-hardware confirmation for their primary functions.
+  `VMBGPOD` (0x28) specifically confirmed 09/07/2026 against two real panels on
+  Stuart's own home bus, closing out the v0.9.2/v0.9.3 registry-gap saga with an
+  actual result rather than just a passing test.
 - **Mock-harness verified only, not yet confirmed against a real bus:** `velbus-clock`
   (both the time/date/DST broadcast and the `set_alarm` command), the
   `velbus-dimmer-20` `get_device_type` read command, and `velbus-energy` in its
@@ -790,9 +793,10 @@ orientation at the time of writing:
 ## 13. Known open issues
 
 - **`VMBKP` (0x42, "Keypad interface module") has no node at all.** Found scanning a
-  real installation (Stuart's home) alongside the `VMBGPOD` gap below — a genuinely new
-  module type, not yet scoped. Its protocol PDF (`protocol_vmbkp.pdf`, 28 pages) is
-  substantial: channel status, module status, and a full per-channel LED control layer
+  real installation (Stuart's home) — confirmed present at address `0xFD`, a real
+  module on a real bus, not a hypothetical. A genuinely new module type, not yet
+  scoped. Its protocol PDF (`protocol_vmbkp.pdf`, 28 pages) is substantial: channel
+  status, module status, and a full per-channel LED control layer
   (clear/set/slow-blink/fast-blink/very-fast-blink), similar in spirit to `velbus-button`
   but with LED feedback control `velbus-button` doesn't have. This needs the same
   "how much work would this involve" scoping pass `velbus-energy` got before it was
