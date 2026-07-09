@@ -39,6 +39,33 @@ const LED_CMD = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Edge colour constants — VMBEL family only (hasEdgeLed), confirmed identical
+// byte layout across every VMBEL sub-family protocol PDF checked (VMBEL1/2/4,
+// VMBELO, VMBELPIR, and their -20 siblings). Command byte 0xD4
+// (COMMAND_SET_PB_BACKLIGHT) is shared with 'Set Custom Color' (defining new
+// custom RGB palette entries) — deliberately NOT implemented here. Defining
+// custom colours is commissioning-time configuration and stays in
+// VelbusLink's domain, same reasoning as VMB4LEDPWM-20's grouping mode and
+// Program Step read/write elsewhere in this project. Only 'Set Edge Color'
+// (applying an already-defined colour — default palette, or a custom slot
+// VelbusLink has already programmed) is in scope: a genuine live/runtime
+// action, not palette editing.
+// ─────────────────────────────────────────────────────────────────────────────
+const EDGE_LAYER_BITS = {
+  background:  0x01,
+  continuous:  0x02,
+  slow_blink:  0x04,
+  fast_blink:  0x08,
+};
+const EDGE_SIDE_BITS = {
+  left:   0x01,
+  top:    0x02,
+  right:  0x04,
+  bottom: 0x08,
+};
+const EDGE_PRIORITY = { low: 0x01, mid: 0x02, high: 0x03 };
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Channel bitmask helpers
 // ─────────────────────────────────────────────────────────────────────────────
 function bitsToChannels(byte1, byte2, byte3, byte4) {
@@ -91,6 +118,7 @@ module.exports = function(RED) {
     const typeDesc = (node.typeId !== null) ? (GLASS_PANEL_TYPES[node.typeId] || null) : null;
     const hasOled  = typeDesc ? typeDesc.hasOled  : false;
     const hasPir   = typeDesc ? typeDesc.hasPir   : false;
+    const hasEdgeLed = typeDesc ? !!typeDesc.hasEdgeLed : false;
     const hasOc    = typeDesc ? !!typeDesc.hasOc  : false;
     const pirCh    = typeDesc ? (typeDesc.pirChannels || {}) : {};
 
@@ -418,6 +446,50 @@ module.exports = function(RED) {
         bytes[byteIndex] = mask;
         const out = pkt(0xF8, node.address, [LED_CMD[cmd], ...bytes]);
         node.bridge.send(out);
+        return;
+      }
+
+      // ── Set edge colour (VMBEL family only) ─────────────────────────────
+      // Applies an already-defined colour (default palette, or a custom
+      // slot VelbusLink has already programmed) across a chosen combination
+      // of layer(s), edge(s), and button page. Does NOT define new custom
+      // colours — that stays in VelbusLink, see the constants comment above.
+      if (cmd === 'set_edge_color') {
+        if (!hasEdgeLed) {
+          node.warn('velbus-glass-panel: ' + (typeDesc ? typeDesc.name : 'this module type') +
+            ' has no edge lighting (VMBEL family only) — sending nothing.');
+          return;
+        }
+
+        const layers = Array.isArray(msg.payload.layers) ? msg.payload.layers : ['background'];
+        const edges  = Array.isArray(msg.payload.edges)  ? msg.payload.edges  : ['left', 'top', 'right', 'bottom'];
+        const palette = msg.payload.palette === 'custom' ? 'custom' : 'default';
+        const index  = Math.max(0, Math.min(31, parseInt(msg.payload.index) || 0));
+        const blink  = !!msg.payload.blink;
+
+        let db2 = 0;
+        for (const l of layers) db2 |= (EDGE_LAYER_BITS[l] || 0);
+        if (palette === 'custom') db2 |= 0x80;
+
+        let db3 = 0;
+        for (const e of edges) db3 |= (EDGE_SIDE_BITS[e] || 0);
+        // Page: 1-8 map to nibble 0-7; 'all' (or omitted) uses 0xF, matching
+        // the protocol's own stated range (1000xxxx through 1111xxxx all
+        // mean "all pages" — 0xF is simply the clearest, most explicit value
+        // in that range to use).
+        const page = msg.payload.page;
+        const pageNibble = (page === undefined || page === 'all')
+          ? 0x0F
+          : Math.max(0, Math.min(7, parseInt(page) - 1));
+        db3 |= (pageNibble << 4) & 0xF0;
+
+        let db4 = index & 0x1F;
+        if (blink) db4 |= 0x80;
+        if (palette === 'custom') {
+          db4 |= (EDGE_PRIORITY[msg.payload.priority] || EDGE_PRIORITY.low) << 5;
+        }
+
+        node.bridge.send(pkt(0xFB, node.address, [0xD4, db2, db3, db4]));
         return;
       }
 

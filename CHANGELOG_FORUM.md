@@ -29,6 +29,51 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.10.3 — 09/07/2026
+
+### velbus-glass-panel — VMBEL edge colour control (set_edge_color)
+
+- **Prompted by Stuart asking whether edge LED colours on `VMBEL` panels
+  could be controlled, or whether a raw-packet escape-hatch node (like the
+  original palette had) was needed instead.** Confirmed a real, well-defined
+  live-bus command exists — no raw-packet node needed for this case.
+- **Scope deliberately split, per explicit decision:** `COMMAND_SET_PB_
+  BACKLIGHT` (`0xD4`) covers two different operations distinguished only by
+  DLC — "Set Custom Color" (`DLC=6`, *defines* a custom RGB palette slot)
+  and "Set Edge Color" (`DLC=4`, *applies* an already-defined colour).
+  Only the latter is implemented: defining new custom colours is
+  commissioning-time configuration, staying in VelbusLink's domain, same
+  reasoning as `VMB4LEDPWM-20`'s grouping mode and Program Step read/write
+  elsewhere in this project. See `HANDOVER.md` section 7.8b for the full
+  byte layout.
+- **`hasEdgeLed` gated to the confirmed `VMBEL` family only** (12 of 29
+  glass panel types: `VMBEL1/2/4`, `VMBELO`, `VMBELPIR`, `VMBEL2PIR`, and
+  their `-20` siblings) — `VMBGP`-family panels have only a single-colour
+  front LED per button, genuinely different hardware, not just a missing
+  feature. Verified the command is byte-for-byte identical across every
+  `VMBEL` sub-family protocol PDF before implementing once. One vestigial
+  "Edge color inhibited" status bit found in `VMBGP1-20/2-20/4-20`'s own
+  `0xED` — confirmed as inherited documentation cruft, not evidence of real
+  edge-colour hardware on those panels.
+- New `set_edge_color` command: `layers` (background/continuous/slow_blink/
+  fast_blink, any combination), `edges` (left/top/right/bottom, any
+  combination), `page` (1-8 or "all"), `palette` (default/custom), `index`
+  (0-31), `priority` (custom only), `blink`. Sending to a non-`VMBEL` panel
+  warns clearly and sends nothing, matching the established per-type
+  gating pattern used throughout this palette.
+- Housekeeping: removed a stale "`VMBKP` has no node at all" entry from
+  `HANDOVER.md`'s known-open-issues — that was resolved back in v0.10.0
+  when `VMBKP` was folded into `velbus-button`, but the issue list was
+  never updated to reflect it.
+
+Verified via the mock-RED harness: default palette, custom palette with
+priority and blink flag, all-defaults shorthand, and rejection on a
+non-`VMBEL` type — every case with hand-checked checksums and manually
+verified bitfield encoding, not just visual review. Not yet sent to a real
+bus.
+
+---
+
 ## v0.10.2 — 09/07/2026
 
 ### velbus-sensor — VMB4AN generic analogue reading (channels 9-12)

@@ -316,6 +316,56 @@
     <dt><code>{ "cmd": "led_set", "channel": 1 }</code></dt>
     <dd>Control button LED. Commands: <code>led_set</code>, <code>led_clear</code>, <code>led_slow</code>, <code>led_fast</code>, <code>led_vfast</code>.</dd>
 
+    <dt><code>set_edge_color</code> — <strong>VMBEL family only</strong> (VMBEL1/2/4, VMBELO,
+    VMBELPIR, and their -20 siblings — not VMBGP-family panels, which have only a
+    single-colour front LED per button, not side-firing edge lighting)</dt>
+    <dd>
+      Applies an <em>already-defined</em> colour — the module's default palette, or a
+      custom slot VelbusLink has already programmed — across a chosen combination of
+      layer(s), edge(s), and button page. <strong>Does not define new custom colours</strong> —
+      that stays in VelbusLink; this node only ever applies/switches between colours that
+      already exist on the module.
+      <pre>
+{ "cmd": "set_edge_color", "index": 5 }
+// Simplest form — every field below is optional and defaults as shown.
+// Applies default palette colour #5 to the background layer, all four
+// edges, all button pages.
+
+{ "cmd": "set_edge_color",
+  "layers": ["background", "continuous"],
+  "edges": ["left", "top", "right", "bottom"],
+  "page": 1,
+  "palette": "default",
+  "index": 5 }
+// Same as above but explicit — background AND continuous-feedback layers,
+// all edges, button page 1 only.
+
+{ "cmd": "set_edge_color",
+  "layers": ["fast_blink"],
+  "edges": ["left"],
+  "page": "all",
+  "palette": "custom",
+  "index": 12,
+  "priority": "high",
+  "blink": true }
+// Custom palette slot #12 (must already be programmed via VelbusLink),
+// applied only to the fast-blink-feedback layer, left edge only, every
+// button page, at highest override priority, with the blink flag set.
+      </pre>
+      <table style="width:100%; font-size:0.85em; border-collapse:collapse; margin-top:4px;">
+        <tr style="text-align:left; border-bottom:1px solid #ccc;"><th>Field</th><th>Values</th><th>Default if omitted</th></tr>
+        <tr><td><code>layers</code></td><td>array, any of: <code>background</code>, <code>continuous</code>, <code>slow_blink</code>, <code>fast_blink</code></td><td><code>["background"]</code></td></tr>
+        <tr><td><code>edges</code></td><td>array, any of: <code>left</code>, <code>top</code>, <code>right</code>, <code>bottom</code></td><td>all four</td></tr>
+        <tr><td><code>page</code></td><td><code>1</code>-<code>8</code>, or <code>"all"</code></td><td><code>"all"</code></td></tr>
+        <tr><td><code>palette</code></td><td><code>"default"</code> or <code>"custom"</code></td><td><code>"default"</code></td></tr>
+        <tr><td><code>index</code></td><td><code>0</code>-<code>31</code> (which palette slot to apply)</td><td><code>0</code></td></tr>
+        <tr><td><code>priority</code></td><td><code>"low"</code>/<code>"mid"</code>/<code>"high"</code> — <em>custom palette only</em>, ignored for default</td><td><code>"low"</code></td></tr>
+        <tr><td><code>blink</code></td><td><code>true</code>/<code>false</code></td><td><code>false</code></td></tr>
+      </table>
+      <p>Sending this to a non-VMBEL panel (e.g. VMBGP2) sends nothing and logs a clear
+      warning rather than silently failing.</p>
+    </dd>
+
     <dt><code>{ "cmd": "output_on" }</code> / <code>"output_off"</code></dt>
     <dd>Open collector output on/off.</dd>
 

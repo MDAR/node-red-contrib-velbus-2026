@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.10.2, 19 nodes, published on npm.**
+Current state at time of writing: **v0.10.3, 19 nodes, published on npm.**
 
 ---
 
@@ -300,7 +300,7 @@ or a string before assuming the parsing logic itself is wrong.
 | `velbus-relay-20` | Velbus (outputs) | V2 relays: VMB1RYS-20, VMB4RYLD-20, VMB4RYNO-20 |
 | `velbus-dimmer` | Velbus (outputs) | Original-series dimmers: VMBDMI, VMBDMI-R, VMB4DC |
 | `velbus-dimmer-20` | Velbus (outputs) | V2 dimmers: VMB2DC-20, VMB8DC-20, VMB4LEDPWM-20 (incl. RGB/RGBW grouping mode) |
-| `velbus-glass-panel` | Velbus (inputs) | All 29 glass panel types (original + V2), buttons/OLED/PIR/open-collector as applicable per type |
+| `velbus-glass-panel` | Velbus (inputs) | All 29 glass panel types (original + V2), buttons/OLED/PIR/open-collector as applicable per type. `VMBEL` family only (12 of the 29 types): `set_edge_color` applies an already-defined colour across layer/edge/page combinations — deliberately not palette *definition*, which stays in VelbusLink |
 | `velbus-thermostat` | Velbus (inputs) | Thermostat function on any glass panel module that has one — same address as the corresponding glass-panel node, coexists without conflict |
 | `velbus-button` | Velbus (inputs) | 12 types across original and V2 series (VMB8PB, VMB8PBU, VMB6PBN, VMB2PBN, VMB4PB, VMB6PB-20, VMB8IR, VMB4PD, VMB4RF, VMBRFR8S, VMBVP01, VMBKP, VMBIN) — plain button events for all; lock/unlock and richer status decode for the 8 types confirmed to support them; fixed semantic channel labels for VMBVP01 (DoorBird) |
 | `velbus-pir` | Velbus (inputs) | Original-series PIR: VMBPIRO-10, VMBPIRM, VMBPIRC, VMBPIRO |
@@ -606,6 +606,45 @@ body[3-5] = 24-bit raw value, MSB first
   (period mode: 0x000000 = short-circuited, 0xFFFFFF = open-circuit)
 ```
 
+### 7.8b `0xD4` — one command byte, two very different operations, `VMBEL` family only
+
+`COMMAND_SET_PB_BACKLIGHT` (`0xD4`) covers **two genuinely different commands**,
+distinguished only by `DLC` (data length), confirmed identical across every
+`VMBEL` sub-family protocol PDF checked (`VMBEL1/2/4`, `VMBELO`, `VMBELPIR`,
+and their `-20` siblings):
+
+- **"Set Custom Color" (`DLC=6`)** — *defines* one of 32 custom colour
+  palette slots as an actual RGB (or white+saturation) value:
+  `[0xD4, paletteIndex(0-31), rgbOrWhiteFlag+saturation, red, green, blue]`.
+  **Deliberately not implemented** — defining new custom colours is
+  commissioning-time configuration, and per an explicit decision, stays in
+  VelbusLink's domain. Same reasoning as `VMB4LEDPWM-20`'s grouping mode and
+  Program Step read/write elsewhere in this project.
+- **"Set Edge Color" (`DLC=4`)** — *applies* an already-defined colour
+  (default palette, or a custom slot VelbusLink has already programmed)
+  across a chosen combination of layer/edge/page. This one **is**
+  implemented (`velbus-glass-panel`'s `set_edge_color` command) — a
+  genuine live/runtime action, not palette editing:
+  ```
+  body[0] = 0xD4
+  body[1] = layer bitmask (bit0=background, bit1=continuous-feedback,
+            bit2=slow-blink-feedback, bit3=fast-blink-feedback) + bit7
+            (0=default palette, 1=custom palette)
+  body[2] = edge bitmask (bit0=left, bit1=top, bit2=right, bit3=bottom) +
+            page nibble (bits4-7: 0-7=pages 1-8, 8-15=all pages — the
+            protocol PDF states the entire 1000-1111 range means "all",
+            not just one value)
+  body[3] = blink flag (bit7) + priority (bits5-6, custom palette only:
+            01=low, 10=mid, 11=high) + palette index (bits0-4, 0-31)
+  ```
+  **Gated to `hasEdgeLed` types only** — the `VMBEL` family, confirmed
+  `VMBGP`-family panels genuinely lack this (they have a single-colour
+  front LED per button, not side-firing edge lighting — a real hardware
+  difference, not just a missing feature). One vestigial "Edge color
+  inhibited" status *bit* appears in `VMBGP1-20/2-20/4-20`'s `0xED` module
+  status — almost certainly inherited from shared documentation with the
+  `VMBEL` family, not evidence those panels have real edge-colour hardware.
+
 ### 7.9 Thermostat commands — always to the primary address
 ```
 0xDB = comfort mode, 0xDC = day mode, 0xDD = night mode, 0xDE = safe mode
@@ -889,15 +928,6 @@ orientation at the time of writing:
 
 ## 13. Known open issues
 
-- **`VMBKP` (0x42, "Keypad interface module") has no node at all.** Found scanning a
-  real installation (Stuart's home) — confirmed present at address `0xFD`, a real
-  module on a real bus, not a hypothetical. A genuinely new module type, not yet
-  scoped. Its protocol PDF (`protocol_vmbkp.pdf`, 28 pages) is substantial: channel
-  status, module status, and a full per-channel LED control layer
-  (clear/set/slow-blink/fast-blink/very-fast-blink), similar in spirit to `velbus-button`
-  but with LED feedback control `velbus-button` doesn't have. This needs the same
-  "how much work would this involve" scoping pass `velbus-energy` got before it was
-  built, not a quick bolt-on to an existing node.
 - **Open-collector support** on several glass panel types (marked "unconfirmed" in the
   registry in section 6) has not been verified against real hardware — the protocol PDFs
   are ambiguous or silent on some of these. Sending `0x01`/`0x02`/`0x03` open-collector
