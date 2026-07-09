@@ -30,8 +30,11 @@ This is a ground-up rewrite replacing the abandoned
 
 - Node-RED v3.0 or later (tested on v5.0)
 - A Velbus TCP gateway:
-  - [velbus-tcp snap](https://snapcraft.io/velbus-tcp) (default port 6000)
-  - [python-velbustcp](https://github.com/velbus/python-velbustcp) (default port 27015)
+  - [velbus-tcp snap](https://snapcraft.io/velbus-tcp)
+  - [python-velbustcp](https://github.com/velbus/python-velbustcp)
+  - Velserv
+  - Velbus_PBserver
+  - Signum
 - Node.js 18+
 
 ---
