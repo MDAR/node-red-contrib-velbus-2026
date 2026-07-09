@@ -123,6 +123,7 @@
 { "cmd": "set_alarm", "alarm": 1, "wakeHour": 7, "wakeMinute": 15, "bedHour": 22, "bedMinute": 30 }
 { "cmd": "set_alarm", "alarm": 2, "wakeHour": 6, "wakeMinute": 45, "bedHour": 23, "bedMinute": 0, "address": "0x30" }
 { "cmd": "set_alarm", "alarm": 1, "enabled": false }   // disable, address omitted = global
+{ "cmd": "set_sunrise_sunset", "sunrise": true, "sunset": true }
   </pre>
 
   <h3>Output</h3>
@@ -195,4 +196,24 @@
   <p><code>enabled</code> defaults to <code>true</code> if omitted. An invalid
   <code>address</code> falls back to a global broadcast with a warning, rather
   than silently failing.</p>
+
+  <h3>set_sunrise_sunset — global or local sunrise/sunset actions (0xAE)</h3>
+  <p>
+    Enables or disables sunrise/sunset-triggered actions. Same global/local address
+    pattern as <code>set_alarm</code> — omit <code>address</code> for every module on
+    the bus, provide one for that module only. Confirmed identical packet body for
+    both from the protocol PDF.
+  </p>
+  <pre>
+{ "cmd": "set_sunrise_sunset", "sunrise": true, "sunset": true }
+// → global: enables both for every module
+
+{ "cmd": "set_sunrise_sunset", "sunrise": true, "sunset": false, "address": "0x30" }
+// → local: module 0x30 only, sunrise enabled, sunset disabled
+  </pre>
+  <p>Output:</p>
+  <pre>
+{ "topic": "sunrise_sunset_set", "target": "global", "sunrise": true, "sunset": true }
+  </pre>
+  <p>Both <code>sunrise</code> and <code>sunset</code> default to <code>true</code> if omitted.</p>
 </script>

@@ -2,11 +2,18 @@
 (function() {
 
   const BUTTON_TYPES = {
-    0x01: { name: 'VMB8PB',    channels: 8, series: 'original' },
-    0x16: { name: 'VMB8PBU',   channels: 8, series: 'original' },
-    0x17: { name: 'VMB6PBN',   channels: 6, series: 'original' },
-    0x1C: { name: 'VMB4PB',    channels: 4, series: 'original' },
-    0x20: { name: 'VMB6PB-20', channels: 6, series: 'v2'       },
+    0x01: { name: 'VMB8PB',    channels: 8, series: 'original', hasLock: false },
+    0x16: { name: 'VMB8PBU',   channels: 8, series: 'original', hasLock: true  },
+    0x17: { name: 'VMB6PBN',   channels: 6, series: 'original', hasLock: true  },
+    0x44: { name: 'VMB4PB',    channels: 4, series: 'original', hasLock: true  },
+    0x4C: { name: 'VMB6PB-20', channels: 6, series: 'v2',       hasLock: true  },
+    0x0A: { name: 'VMB8IR',    channels: 8, series: 'original', hasLock: false },
+    0x0B: { name: 'VMB4PD',    channels: 4, series: 'original', hasLock: false },
+    0x1A: { name: 'VMB4RF',    channels: 4, series: 'original', hasLock: true  },
+    0x30: { name: 'VMBRFR8S',  channels: 8, series: 'original', hasLock: true  },
+    0x33: { name: 'VMBVP01',   channels: 8, series: 'original', hasLock: false },
+    0x42: { name: 'VMBKP',     channels: 8, series: 'v2',       hasLock: true  },
+    0x43: { name: 'VMBIN',     channels: 1, series: 'original', hasLock: true  },
   };
 
   RED.nodes.registerType('velbus-button', {
@@ -20,9 +27,9 @@
       moduleName:   { value: '' },
       typeId:       { value: '' },
     },
-    inputs:  0,
-    outputs: 1,
-    outputLabels: ['button events'],
+    inputs:  1,
+    outputs: 2,
+    outputLabels: ['button events / status', 'warnings'],
     icon:    'font-awesome/fa-hand-pointer-o',
     paletteLabel: 'button',
 
@@ -72,7 +79,8 @@
         const tid  = $opt.data('typeid');
         if (tid && BUTTON_TYPES[tid]) {
           const t = BUTTON_TYPES[tid];
-          $('#btn-type-hint').text(t.name + ' — ' + t.channels + ' ch · ' + t.series).show();
+          $('#btn-type-hint').text(t.name + ' — ' + t.channels + ' ch · ' + t.series +
+            (t.hasLock ? ' · lock/unlock supported' : ' · no lock/unlock')).show();
           $('#node-input-typeId').val('0x' + tid.toString(16).padStart(2,'0').toUpperCase());
           const $ch = $('#node-input-channelCount');
           if (!$ch.val() || $ch.data('auto')) $ch.val(t.channels).data('auto', true);
@@ -152,10 +160,26 @@
   </p>
 
   <h3>Supported modules</h3>
-  <p>VMB8PB, VMB8PBU, VMB6PBN, VMB4PB (original series) · VMB6PB-20 (V2 series).</p>
-  <p>Also suitable for glass panel sub-addresses when button events need separate wiring.</p>
+  <table style="width:100%; font-size:0.85em; border-collapse:collapse;">
+    <tr style="text-align:left; border-bottom:1px solid #ccc;"><th>Module</th><th>Channels</th><th>Lock/unlock</th><th>Notes</th></tr>
+    <tr><td>VMB8PB</td><td>8</td><td>No</td><td>Original series</td></tr>
+    <tr><td>VMB8PBU</td><td>8</td><td>Yes</td><td>Original series</td></tr>
+    <tr><td>VMB6PBN</td><td>6</td><td>Yes</td><td>Original series</td></tr>
+    <tr><td>VMB4PB</td><td>4</td><td>Yes</td><td>Original series</td></tr>
+    <tr><td>VMB6PB-20</td><td>6</td><td>Yes</td><td>V2 series</td></tr>
+    <tr><td>VMB8IR</td><td>8</td><td>No</td><td>IR remote receiver — presents fixed Velbus IR codes as button events</td></tr>
+    <tr><td>VMB4PD</td><td>4</td><td>No</td><td>LCD module — only the 4 button channels are covered, not the LCD display</td></tr>
+    <tr><td>VMB4RF</td><td>4</td><td>Yes</td><td>433MHz RF receiver</td></tr>
+    <tr><td>VMBRFR8S</td><td>8</td><td>Yes</td><td>433MHz RF receiver, 8 channel</td></tr>
+    <tr><td>VMBVP01</td><td>8</td><td>No</td><td>DoorBird intercom — fixed channel labels: Motion 1/2, Bell 1/2, Door 1/2, Virtual button 1/2</td></tr>
+    <tr><td>VMBKP</td><td>8</td><td>Yes</td><td>Simple OEM keypad module</td></tr>
+    <tr><td>VMBIN</td><td>1</td><td>Yes</td><td>Single-channel input</td></tr>
+  </table>
+  <p style="font-size:0.85em; color:#888;">
+    Also suitable for glass panel sub-addresses when button events need separate wiring.
+  </p>
 
-  <h3>Output</h3>
+  <h3>Output 1 — button events / status</h3>
   <pre>{
   "type":        "button",
   "on":          true,
@@ -164,9 +188,40 @@
   "longPressed": []
 }</pre>
   <p>
-    <code>on</code> is <code>true</code> when any channel is pressed or long-pressed,
-    <code>false</code> when only releases are present.
-    Channel numbers are 1-indexed. All three arrays are always present —
-    empty arrays when no channels in that state.
+    <code>on</code> is <code>true</code> when any channel is pressed or long-pressed.
+    Channel numbers are 1-indexed. All three arrays are always present — empty when no
+    channels are in that state. For modules with configured or fixed channel names,
+    array entries become <code>{ "channel": 3, "label": "Landing" }</code> objects
+    instead of plain numbers — check for a <code>.label</code> property if you need to
+    handle both cases generically.
   </p>
+
+  <p>For modules with lock/unlock support, a richer status is also emitted whenever the
+  module sends one (not requestable on demand except via <code>get_status</code> below):</p>
+  <pre>{
+  "type": "status",
+  "program": "group1",
+  "channels": [
+    { "channel": 1, "pressed": false, "enabled": true, "inverted": false,
+      "locked": false, "programDisabled": false },
+    ...
+  ]
+}</pre>
+
+  <h3>Output 2 — warnings</h3>
+  <p>Fires when a command isn't supported by the configured module type (e.g. sending
+  <code>lock</code> to a VMB8PB) — nothing is sent to the bus in that case.</p>
+
+  <h3>Input — Commands</h3>
+  <pre>
+{ "cmd": "get_status" }
+{ "cmd": "get_name", "channel": 3 }
+{ "cmd": "lock",   "channel": 3, "duration": 60 }
+{ "cmd": "lock",   "channel": 3 }                 // omit duration = permanent
+{ "cmd": "unlock", "channel": 3 }
+{ "cmd": "lock",   "channel": "all" }              // or omit channel entirely
+  </pre>
+  <p><code>lock</code>/<code>unlock</code> only take effect on modules that support them
+  (see the table above) — sent to any other type, output 2 explains why nothing happened
+  rather than silently doing nothing.</p>
 </script>

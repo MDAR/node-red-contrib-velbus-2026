@@ -49,6 +49,21 @@ const ALL_TYPES = {
   0x40: 'VMBUSBIP',
   // Temperature sensor (old)
   0x0C: 'VMB1TS',
+  // Additional button/input modules (09/07/2026)
+  0x0A: 'VMB8IR',   0x0B: 'VMB4PD',   0x1A: 'VMB4RF',
+  0x30: 'VMBRFR8S', 0x33: 'VMBVP01',  0x42: 'VMBKP',
+  0x43: 'VMBIN',
+  // Additional sensor/input module (09/07/2026)
+  0x05: 'VMB6IN',
+  // Additional glass panel types (09/07/2026)
+  0x3E: 'VMBGP4PIR-2', 0x25: 'VMBGPTC',
+  // Recognized but deliberately not supported (09/07/2026) — named correctly
+  // in a scan rather than showing "unknown", but no node exists for these
+  // and none is planned. See HANDOVER.md section 13 / coverage-roadmap.md
+  // for the reasoning per type.
+  0x45: 'VMBDALI',   0x5A: 'VMBDALI-20',
+  0x13: 'VMBLCDWB',  0x3F: 'VMCM3',
+  0x5B: 'VMBSIG-20', 0x60: 'VMBSIG-21',
 };
 
 const NODE_SUGGESTION = {
@@ -88,6 +103,19 @@ const NODE_SUGGESTION = {
   0x52: 'velbus-glass-panel', 0x53: 'velbus-glass-panel', 0x54: 'velbus-glass-panel',
   0x55: 'velbus-glass-panel', 0x56: 'velbus-glass-panel', 0x57: 'velbus-glass-panel',
   0x5C: 'velbus-glass-panel', 0x5F: 'velbus-glass-panel',
+  0x3E: 'velbus-glass-panel', 0x25: 'velbus-glass-panel',
+  // Additional button/input modules (09/07/2026)
+  0x0A: 'velbus-button',   0x0B: 'velbus-button',   0x1A: 'velbus-button',
+  0x30: 'velbus-button',   0x33: 'velbus-button',   0x42: 'velbus-button',
+  0x43: 'velbus-button',
+  // Additional sensor/input module (09/07/2026)
+  0x05: 'velbus-sensor',
+  // Recognized but deliberately not supported (09/07/2026) — explicit label
+  // rather than falling through to null, so a scan clearly distinguishes
+  // "we know what this is and chose not to support it" from "unknown type".
+  0x45: 'Not supported', 0x5A: 'Not supported',
+  0x13: 'Not supported', 0x3F: 'Not supported',
+  0x39: 'Not supported', 0x5B: 'Not supported', 0x60: 'Not supported',
 };
 
 // Channel count per module type — physical channels only.
@@ -126,6 +154,12 @@ const MODULE_CHANNELS = {
   0x52: 4,  0x53: 8,  0x54: 1,
   0x55: 2,  0x56: 4,  0x57: 32,
   0x5C: 6,  0x5F: 8,
+  // Additional glass panel types (09/07/2026)
+  0x3E: 8,  0x25: 32,
+  // Additional button/input modules (09/07/2026)
+  0x0A: 8,  0x0B: 4,  0x1A: 4,  0x30: 8,  0x33: 8,  0x42: 8,  0x43: 1,
+  // Additional sensor/input module (09/07/2026)
+  0x05: 6,
 };
 
 module.exports = function(RED) {

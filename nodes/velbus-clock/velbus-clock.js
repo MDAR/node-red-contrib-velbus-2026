@@ -33,6 +33,13 @@ const { pkt } = require('../../lib/velbus-utils');
 //                                 module only) — the protocol PDF literally
 //                                 defines these as two address variants of
 //                                 the same command, not two different ones.
+//   0xAE Enable/disable sunrise/sunset related actions — DLC=3,
+//                                 body=[0xAE, 0xFF, flags] (channel byte is
+//                                 always 0xFF per the protocol, not a real
+//                                 channel selector). flags: bit0=sunrise
+//                                 enabled, bit1=sunset enabled. Same
+//                                 global/local address pattern as 0xC3 above
+//                                 — confirmed identical body for both.
 //
 // dayOfWeek: 0=Monday...6=Sunday (NOT JS Date's 0=Sunday...6=Saturday).
 // 0x00 is broadcast-only — never assign it as a real module's own address.
@@ -121,6 +128,11 @@ module.exports = function(RED) {
     function sendAlarm(targetAddr, alarmNum, wakeHour, wakeMinute, bedHour, bedMinute, enabled) {
       node.bridge.send(pkt(0xFB, targetAddr,
         [0xC3, alarmNum, wakeHour, wakeMinute, bedHour, bedMinute, enabled ? 1 : 0]));
+    }
+
+    function sendSunriseSunset(targetAddr, sunriseEnabled, sunsetEnabled) {
+      const flags = (sunriseEnabled ? 0x01 : 0x00) | (sunsetEnabled ? 0x02 : 0x00);
+      node.bridge.send(pkt(0xFB, targetAddr, [0xAE, 0xFF, flags]));
     }
 
     // Resolves msg.payload.address to a target address for set_alarm.
@@ -237,6 +249,30 @@ module.exports = function(RED) {
               alarm:      alarmNum,
               wakeHour, wakeMinute, bedHour, bedMinute,
               enabled
+            }
+          });
+          break;
+        }
+
+        case 'set_sunrise_sunset': {
+          if (!node.bridge.isConnected()) { node.warn('velbus-clock: bridge not connected'); return; }
+
+          const sunriseEnabled = inp.sunrise !== false; // default true
+          const sunsetEnabled  = inp.sunset  !== false; // default true
+
+          const { addr: targetAddr, label } = resolveTargetAddr(inp.address);
+
+          sendSunriseSunset(targetAddr, sunriseEnabled, sunsetEnabled);
+
+          setStatus('sunrise:' + (sunriseEnabled ? 'on' : 'off') +
+            ' sunset:' + (sunsetEnabled ? 'on' : 'off') + ' — ' + label, 'green');
+
+          node.send({
+            payload: {
+              topic:  'sunrise_sunset_set',
+              target: targetAddr === BROADCAST_ADDR ? 'global' : ('0x' + targetAddr.toString(16).padStart(2, '0').toUpperCase()),
+              sunrise: sunriseEnabled,
+              sunset:  sunsetEnabled,
             }
           });
           break;

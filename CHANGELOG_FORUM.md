@@ -29,6 +29,108 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.10.0 — 09/07/2026
+
+### Coverage roadmap implementation — 9 new module types, velbus-button overhaul, velbus-clock sunrise/sunset
+
+Following a full rationalization pass over every unaddressed Velbus module
+type and feature (see `coverage-roadmap.md`), this implements everything
+confirmed in scope. Every single item below was checked against its actual
+protocol document before being added — several real divergences were caught
+in the process that would otherwise have shipped silently wrong.
+
+**velbus-button — substantial overhaul, not just new registry entries:**
+- 7 new module types: VMB8IR, VMB4PD, VMB4RF, VMBRFR8S, VMBVP01, VMBKP, VMBIN.
+- **Lock/unlock (0x12/0x13)** — confirmed present on 8 of the 12 total types
+  now covered; **NOT universal**, despite being asked for as "a key Velbus
+  feature." VMB8PB, VMB8IR, VMB4PD, and VMBVP01 genuinely lack this command
+  in their own protocol documents. Gated per-type (`hasLock`) — sending it to
+  an unsupported type now warns clearly on output 2 rather than silently
+  doing nothing.
+- **Richer 0xED status decode** (locked/enabled/inverted/program-disabled) —
+  also NOT universal. VMB8PB's 0xED is a completely different, simpler
+  LED-only format; VMB4RF's status uses command byte 0xB4, not 0xED, with a
+  different field at DATABYTE4 ("learn transmitter mode"); VMBVP01's 0xED is
+  a third, shorter shape again. Gated per-type (`hasRichStatus`) — decoding
+  is skipped entirely for types that don't match, rather than risk
+  misreading whatever they actually send.
+- **Channel names surfaced in event output** (0xF0/F1/F2) — found the
+  selector byte convention itself is inconsistent across types: some use a
+  bitmask (one bit per channel), others a literal 1-based number. These
+  produce the *same* byte value for channels 1-2, diverging only from
+  channel 3 onward — exactly the kind of thing that would pass casual
+  testing and then silently corrupt every name from channel 3 up. Verified
+  explicitly at channel 3 for both conventions before shipping.
+- **VMBVP01 (DoorBird)** gets fixed semantic channel labels (Motion 1/2,
+  Bell 1/2, Door 1/2, Virtual button 1/2) — hardware-fixed functions, not
+  VelbusLink-configurable names, so not sourced from 0xF0-F2 at all.
+- Output changed from 1 to 2 (events/status, warnings) — non-breaking for
+  existing flows, the new output simply has no wires by default.
+- **Real mistake caught before shipping:** first pass had VMB4RF at 8
+  channels; its own status packet says "channel 1 to 4," matching its name.
+  Corrected to 4 before release, not after.
+- **A second, more serious pre-existing bug found and fixed, unrelated to
+  today's additions:** `VMB4PB` and `VMB6PB-20` — two of the *original* five
+  button types, present since v0.5.2 — were registered under wrong type
+  bytes (`0x1C` and `0x20`) in this file's own registry. `0x1C` isn't a real
+  Velbus type byte at all; `0x20` actually belongs to `VMBGP4`, an unrelated
+  glass panel type. `velbus-scan.js` has always had the correct values
+  (`0x44`/`0x4C`) — only this file's internal lookup was wrong, meaning a
+  real `VMB4PB` or `VMB6PB-20`, correctly identified by a scan, would never
+  have matched this file's own type descriptor at all. Every type-specific
+  feature (and now, lock/unlock and rich status too) would have silently
+  never activated for these two types. Found by cross-referencing the
+  official type list while writing this changelog entry, not by design —
+  worth remembering that documentation review can surface real bugs too.
+
+**velbus-sensor:** VMB6IN added. Confirmed simpler than its VMB7IN sibling,
+not just a smaller version of it — no lock/unlock command exists for it at
+all, and its 0xED module status is 5 bytes vs VMB7IN's 7. The existing
+`body.length < 7` guard already skips it safely; no code change needed
+beyond the registry entry itself.
+
+**velbus-glass-panel:** VMBGP4PIR-2 (0x3E) and VMBGPTC (0x25) added.
+- **Real mistake caught:** VMBGP4PIR-2's channels 5-8 have completely
+  different semantics from its 0x2D sibling despite the near-identical name
+  (Dark/Light output, Motion output, Light-depending-motion, Absence output
+  — not virtual/dark/light/motion). Copying the sibling's mapping would have
+  silently mislabeled four channels.
+- VMBGPTC confirmed sharing its actual protocol document with VMBGPO
+  (0x21) — a thermostat-only variant of the same panel hardware, added to
+  the glass-panel registry rather than as thermostat-node-only, so
+  `velbus-thermostat` picks up its function automatically the same way it
+  already does for every other panel address.
+
+**velbus-clock:** sunrise/sunset enable/disable (0xAE) added, same
+global/local address pattern as the existing `set_alarm` — confirmed
+identical packet body for both from the protocol PDF.
+
+**velbus-scan:** all of the above added across its three independent tables
+(`ALL_TYPES`/`NODE_SUGGESTION`/`MODULE_CHANNELS`) — the exact lesson from
+the VMBGPOD saga (v0.9.2/v0.9.3), applied proactively this time rather than
+discovered the hard way again. Also adds explicit `"Not supported"` scan
+labels (rather than falling through to a bare name with no node) for
+VMBDALI, VMBDALI-20, VMBLCDWB, VMCM3, VMBSIG, VMBSIG-20, and VMBSIG-21 —
+recognized correctly in a scan, deliberately not built, by design rather
+than oversight.
+
+**Explicitly deferred, not built this round:** VMB1DM, VMBDME, and VMB1LED
+(the dimmer-family additions) all turned out to use a genuinely different
+single-channel `0xEE` status layout — distinct from both `velbus-dimmer`'s
+own format and `velbus-dimmer-20`'s multi-channel bitmask format. This needs
+real new decode logic, not a registry entry, and doesn't meet the
+"minimal effort" bar set for this round. Parked rather than forced in.
+
+**Verification:** every new packet format checked against its actual
+protocol document (not inferred from a same-named sibling) before being
+implemented; every new command exercised through the mock-RED harness with
+hand-checked checksums; the channel-3 naming-convention divergence
+specifically tested for both conventions, not just one; a full simulated
+scan run across every new and "not supported" type confirmed correct
+`suggestedNode`/`channels` output end to end. Not yet sent to a real bus.
+
+---
+
 ## v0.9.4 — 09/07/2026
 
 ### velbus-button — critical bug, live since v0.5.2: button events shifted by one byte

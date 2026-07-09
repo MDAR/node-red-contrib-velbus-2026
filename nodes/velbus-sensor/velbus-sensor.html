@@ -4,6 +4,7 @@
   const SENSOR_TYPES = {
     0x22: { name: 'VMB7IN',  hasCounter: true,  series: 'original' },
     0x32: { name: 'VMB4AN',  hasCounter: false, series: 'original' },
+    0x05: { name: 'VMB6IN',  hasCounter: false, series: 'original' },
   };
 
   RED.nodes.registerType('velbus-sensor', {

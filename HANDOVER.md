@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.9.3, 19 nodes, published on npm.**
+Current state at time of writing: **v0.10.0, 19 nodes, published on npm.**
 
 ---
 
@@ -106,7 +106,7 @@ lib/                       Shared code — protocol utilities and per-module-fam
   dimmer-types.js            Original-series dimmer module type registry
   dimmer-types-20.js         V2 dimmer module type registry (incl. LED grouping mode / Device
                              Type table for VMB4LEDPWM-20)
-  glass-panel-types.js       All 27 glass panel module types in one registry (hasOled/hasPir/
+  glass-panel-types.js       All 29 glass panel module types in one registry (hasOled/hasPir/
                              hasOc/minMapVer flags per type)
   pir-types.js / pir-types-20.js       PIR sensor module type registries
   sensor-types.js / sensor-types-20.js Sensor/meteo module type registries
@@ -300,18 +300,18 @@ or a string before assuming the parsing logic itself is wrong.
 | `velbus-relay-20` | Velbus (outputs) | V2 relays: VMB1RYS-20, VMB4RYLD-20, VMB4RYNO-20 |
 | `velbus-dimmer` | Velbus (outputs) | Original-series dimmers: VMBDMI, VMBDMI-R, VMB4DC |
 | `velbus-dimmer-20` | Velbus (outputs) | V2 dimmers: VMB2DC-20, VMB8DC-20, VMB4LEDPWM-20 (incl. RGB/RGBW grouping mode) |
-| `velbus-glass-panel` | Velbus (inputs) | All 27 glass panel types (original + V2), buttons/OLED/PIR/open-collector as applicable per type |
+| `velbus-glass-panel` | Velbus (inputs) | All 29 glass panel types (original + V2), buttons/OLED/PIR/open-collector as applicable per type |
 | `velbus-thermostat` | Velbus (inputs) | Thermostat function on any glass panel module that has one — same address as the corresponding glass-panel node, coexists without conflict |
-| `velbus-button` | Velbus (inputs) | Dedicated push-button modules: VMB8PB, VMB8PBU, VMB6PBN, VMB2PBN, VMB4PB, VMB6PB-20 |
+| `velbus-button` | Velbus (inputs) | 12 types across original and V2 series (VMB8PB, VMB8PBU, VMB6PBN, VMB2PBN, VMB4PB, VMB6PB-20, VMB8IR, VMB4PD, VMB4RF, VMBRFR8S, VMBVP01, VMBKP, VMBIN) — plain button events for all; lock/unlock and richer status decode for the 8 types confirmed to support them; fixed semantic channel labels for VMBVP01 (DoorBird) |
 | `velbus-pir` | Velbus (inputs) | Original-series PIR: VMBPIRO-10, VMBPIRM, VMBPIRC, VMBPIRO |
 | `velbus-pir-20` | Velbus (inputs) | V2 PIR: VMBPIR-20, VMBPIRO-20 |
 | `velbus-meteo` | Velbus (inputs) | Weather station: VMBMETEO |
-| `velbus-sensor` | Velbus (inputs) | Original-series input/analogue: VMB7IN, VMB4AN |
+| `velbus-sensor` | Velbus (inputs) | Original-series input/analogue: VMB7IN, VMB4AN, VMB6IN |
 | `velbus-sensor-20` | Velbus (inputs) | V2 input: VMB8IN-20 |
 | `velbus-blind` | Velbus (outputs) | VMB1BL, VMB2BL |
 | `velbus-blind-s` | Velbus (outputs) | VMB1BLS, VMB2BLE, VMB2BLE-10 |
 | `velbus-blind-20` | Velbus (outputs) | VMB2BLE-20 |
-| `velbus-clock` | Velbus (outputs) | **No fixed module address.** Broadcasts system time/date/DST to the bus broadcast address (`0x00`), and sets clock alarms either globally (broadcast) or locally (a specific module, via a per-message address override) |
+| `velbus-clock` | Velbus (outputs) | **No fixed module address.** Broadcasts system time/date/DST to the bus broadcast address (`0x00`), sets clock alarms and sunrise/sunset enable state either globally (broadcast) or locally (a specific module, via a per-message address override) |
 | `velbus-energy` | Velbus (inputs) | VMBPSUMNGR-20 — power supply manager: PSU load percentages, live wattage/voltage/amperage per rail, a warranty (hours-in-operation) counter, and PSU/warranty alarm status |
 
 Palette group colours: **Velbus (inputs)** is teal (`#3A8C8C`), **Velbus (outputs)** is
@@ -347,23 +347,31 @@ blue (`#4A90D9`).
 | 0x2F | VMBDMI-R | velbus-dimmer | n/a |
 | 0x4B | VMB8DC-20 | velbus-dimmer-20 | n/a |
 
-### Push buttons
-| Type byte | Module | Node |
-|---|---|---|
-| 0x01 | VMB8PB | velbus-button |
-| 0x16 | VMB8PBU | velbus-button |
-| 0x17 | VMB6PBN | velbus-button |
-| 0x18 | VMB2PBN | velbus-button |
-| 0x44 | VMB4PB | velbus-button |
-| 0x4C | VMB6PB-20 | velbus-button |
+### Push buttons (all → velbus-button, 12 types)
+| Type byte | Module | Lock/unlock | Notes |
+|---|---|---|---|
+| 0x01 | VMB8PB | No | Simpler 0xED (LED status only), no lock command at all |
+| 0x16 | VMB8PBU | Yes | |
+| 0x17 | VMB6PBN | Yes | |
+| 0x18 | VMB2PBN | — | Not yet cross-checked for lock support, treated conservatively |
+| 0x44 | VMB4PB | Yes | **Type byte corrected 09/07/2026** — was wrongly keyed 0x1C in `velbus-button.js`'s own registry (not a real type byte at all); `velbus-scan.js` always had 0x44 right |
+| 0x4C | VMB6PB-20 | Yes | **Type byte corrected 09/07/2026** — was wrongly keyed 0x20 (which is actually VMBGP4, a different module); `velbus-scan.js` always had 0x4C right |
+| 0x0A | VMB8IR | No | IR receiver — presents fixed Velbus IR codes as button events |
+| 0x0B | VMB4PD | No | LCD module — only the 4 button channels covered, not the LCD |
+| 0x1A | VMB4RF | Yes | 4 channels (matches its name) — status uses 0xB4, not 0xED, so rich status is not decoded even though lock/unlock works |
+| 0x30 | VMBRFR8S | Yes | |
+| 0x33 | VMBVP01 | No | DoorBird — fixed semantic labels (Motion 1/2, Bell 1/2, Door 1/2, Virtual button 1/2), different/shorter 0xED not decoded |
+| 0x42 | VMBKP | Yes | |
+| 0x43 | VMBIN | Yes | Single channel |
 
-### Glass panels (all → velbus-glass-panel, 27 types)
+### Glass panels (all → velbus-glass-panel, 29 types)
 | Type byte | Module | OLED | PIR | Open collector | Min. map version |
 |---|---|---|---|---|---|
 | 0x1E | VMBGP1 | no | no | unconfirmed¹ | — |
 | 0x1F | VMBGP2 | no | no | unconfirmed¹ | — |
 | 0x20 | VMBGP4 | no | no | unconfirmed¹ | — |
 | 0x21 | VMBGPO | yes | no | yes | 2 |
+| 0x25 | VMBGPTC | yes | no | no | — |
 | 0x28 | VMBGPOD | yes | no | no | — |
 | 0x2D | VMBGP4PIR | no | yes | unconfirmed¹ | — |
 | 0x34 | VMBEL1 | no | no | yes | 2 |
@@ -375,6 +383,7 @@ blue (`#4A90D9`).
 | 0x3B | VMBGP2-2 | no | no | no² | — |
 | 0x3C | VMBGP4-2 | no | no | no² | — |
 | 0x3D | VMBGPOD-2 | yes | no | unconfirmed¹ | 2 |
+| 0x3E | VMBGP4PIR-2 | no | yes | unconfirmed¹ | — |
 | 0x47 | VMBEL2PIR | no | yes | yes | — |
 | 0x4F | VMBEL1-20 | no | no | yes | — |
 | 0x50 | VMBEL2-20 | no | no | yes | — |
@@ -387,6 +396,14 @@ blue (`#4A90D9`).
 | 0x57 | VMBGPO-20 | yes | no | yes | — |
 | 0x5C | VMBEL2PIR-20³ | no | yes | yes | — |
 | 0x5F | VMBGP4PIR-20 | no | yes | unconfirmed¹ | — |
+
+⁴ VMBGPTC (0x25) shares its actual protocol document with VMBGPO (0x21) — a
+thermostat-only variant of the same touch panel hardware, not a separate
+product. Type byte confirmed from the official type list, not spelled out
+separately in the shared document's body. VMBGP4PIR-2 (0x3E) has genuinely
+different channel 5-8 semantics from its 0x2D sibling despite the similar
+name (Dark/Light output, Motion output, Light-depending-motion, Absence
+output — not virtual/dark/light/motion) — confirmed directly, not assumed.
 
 ¹ Open-collector support unconfirmed against real hardware — see [section 13](#13-known-open-issues).
 ² Confirmed no open-collector commands in the protocol PDF, but not yet live-verified.
@@ -411,6 +428,7 @@ what this registry currently uses — flagged for verification, see
 | 0x31 | VMBMETEO | velbus-meteo |
 | 0x32 | VMB4AN | velbus-sensor |
 | 0x4E | VMB8IN-20 | velbus-sensor-20 |
+| 0x05 | VMB6IN | velbus-sensor — simpler sibling of VMB7IN, no lock/unlock at all, 5-byte 0xED (vs VMB7IN's 7) safely skipped by the existing length guard |
 
 ### Blind / shutter
 | Type byte | Module | Node |
@@ -637,7 +655,7 @@ about why in the commit message.
 
 - **Generational split.** Nodes generally split at the V2.0 boundary — one node for
   original-series, a separate node for V2. **Exceptions:** `velbus-glass-panel` (one
-  node covers all 27 types, both generations, via the type registry's per-type flags
+  node covers all 29 types, both generations, via the type registry's per-type flags
   rather than a code-level split), `velbus-thermostat` (covers the thermostat function
   on any glass panel type), `velbus-meteo` (only one generation exists), and the blind
   family (`velbus-blind` / `velbus-blind-s` / `velbus-blind-20`, split by actual protocol
@@ -851,6 +869,33 @@ orientation at the time of writing:
   against the year's January/July offsets to infer whether daylight saving is active)
   has only been sanity-checked in an environment where daylight saving never applies —
   a genuine positive "DST is active" case hasn't been observed and confirmed correct.
+- **`VMB1DM`, `VMBDME`, `VMB1LED` (dimmer-family additions) deferred, not built.**
+  All three use a genuinely different single-channel `0xEE` status layout
+  (mode/dim-value/LED/timer/config in one packet) — distinct from both
+  `velbus-dimmer`'s own `0xB8`-based format and `velbus-dimmer-20`'s
+  multi-channel bitmask `0xEE` format. Needs real new decode logic, not a
+  registry entry — see `coverage-roadmap.md` for the full reasoning.
+- **Bus error counter (`0xDA`) — design settled, not built.** Confirmed
+  useful but explicitly framed as a rare edge case. Resolved design: every
+  node that registers for its own address already receives an unsolicited
+  `0xDA` broadcast if one occurs, so no new request command is needed —
+  just passive decoding, emitted only on a secondary output and only when
+  at least one counter is non-zero, so it never appears during normal
+  operation. Deliberately deferred since it touches most/all existing nodes
+  — a session of its own, not a quick addition.
+- **OLED image writing — stretch goal, not built.** Pushing a custom B&W
+  1-bit bitmap to an OLED glass panel (e.g. swapping in a different-language
+  greeting for a visitor without opening VelbusLink) — genuine use case,
+  explicitly not urgent. `velbus-glass-panel` currently only reads memo text
+  (`0xAC`), no write path exists in either direction for display content.
+- **`VMBDALI`/`VMBDALI-20`, `VMBLCDWB`, `VMCM3`, `VMBSIG`/`VMBSIG-20`/`VMBSIG-21`
+  — recognized, deliberately not supported.** These show their correct name
+  in a scan (not `unknown_0xNN`) with an explicit `"Not supported"` in place
+  of a suggested node, rather than silently falling through to `null`. DALI
+  is its own protocol layer beyond the gateway; the Signum types are a
+  proprietary HomeAssistant-based master clock, not interactable; VMBLCDWB
+  and VMCM3 are legacy/custom modules with no planned support. By design,
+  not oversight — see `coverage-roadmap.md` for the full per-type reasoning.
 
 ---
 
@@ -941,6 +986,24 @@ git push --tags
   that node's own `.html` dropdown copy, and `velbus-scan.js`'s independent copy) —
   see section 3 for the full explanation. Missing one produces a symptom in a
   different part of the palette than wherever the type was actually added.
+- **Never assume a feature is universal across a module family — check each type's
+  own protocol document.** Proven wrong repeatedly (09/07/2026) while adding
+  lock/unlock and richer status decode to `velbus-button`: of 12 button-family
+  types, 4 genuinely lack the lock/unlock command entirely (not "probably most
+  don't" — specific, named exceptions); one type's status uses a completely
+  different command byte (`0xB4` instead of `0xED`); the "which channel" selector
+  byte in the name-request commands uses two incompatible conventions (bitmask vs.
+  literal number) that happen to produce identical values for channels 1-2 and only
+  diverge from channel 3 onward — exactly the kind of divergence that survives
+  casual testing. When a person asks for a capability "because it's a key feature,"
+  that's a reason to verify it broadly, not a reason to skip checking each type.
+- **Registry type-byte keys need the same verification as everything else** — don't
+  assume an existing entry's key is correct just because it's already shipped.
+  Found 09/07/2026: `VMB4PB` and `VMB6PB-20` had been keyed under wrong type bytes
+  in `velbus-button.js`'s own registry since v0.5.2 (`0x1C`, which isn't a real
+  Velbus type byte at all, and `0x20`, which actually belongs to `VMBGP4`) — while
+  `velbus-scan.js` had always had the correct values. Cross-check against the
+  official type list (section 15) periodically, not just when adding something new.
 - **Thermostat commands go to the primary address only,** never a subaddress.
 - **Respect the 20ms minimum between `0xFC` writes** on original-series modules — this
   is real EEPROM wear, not an arbitrary rate limit.
