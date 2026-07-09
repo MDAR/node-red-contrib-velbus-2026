@@ -137,11 +137,23 @@
   "enabled": [1,2,3,4,5,6,7,8], "locked": [], "progDisabled": [],
   "program": "summer", "alarms": { "alarm1Active": false, "alarm2Active": false } }</pre>
 
-  <h3>Output 2 — Counter data (VMB7IN only)</h3>
+  <h3>Output 2 — Counter data (VMB7IN) / Analogue readings (VMB4AN)</h3>
   <pre>{ "type": "counter", "channel": 1, "count": 12345,
   "pulsesPerUnit": 1000, "periodMs": 3600, "overflow": false }</pre>
   <p>Engineering units: calculate in flow using pulsesPerUnit and periodMs.</p>
   <p>Power (W) = 3,600,000,000 / (periodMs × pulsesPerUnit)</p>
+
+  <p>VMB4AN sensor channels (9-12) — deliberately generic, no engineering-unit
+  conversion attempted here (mode-aware scaling, presets, and sleep-timer
+  configuration are a larger, separately-scoped piece of work — see
+  <code>coverage-roadmap.md</code>):</p>
+  <pre>{ "type": "analogue", "channel": 9, "mode": "voltage", "raw": 12345 }</pre>
+  <p><code>mode</code> is <code>"voltage"</code> (0-10V, 0.25mV/count),
+  <code>"current"</code> (4-20mA, 5µA/count), <code>"resistance"</code>
+  (PT100/PT1000/Ni1000, 0.25Ω/count), or <code>"period"</code> (0.5µs/count —
+  <code>raw</code> of <code>0</code> means short-circuited, <code>16777215</code>
+  means open-circuit). Apply the resolution yourself in the flow, e.g.
+  <code>volts = raw * 0.00025</code> for voltage mode.</p>
 
   <h3>Input commands</h3>
   <dl>
@@ -150,6 +162,10 @@
     <dd>Request counter (VMB7IN). channels=bitmask of ch1-4 (default 15=all). interval=0 no change.</dd>
     <dt><code>{ "cmd": "reset_counter", "channel": 1 }</code></dt><dd>Reset pulse counter to zero.</dd>
     <dt><code>{ "cmd": "load_counter", "channel": 1, "value": 12345 }</code></dt><dd>Load counter with preset value (build 1426+).</dd>
+    <dt><code>{ "cmd": "get_analogue", "channel": 9 }</code></dt>
+    <dd>Request an analogue reading now (VMB4AN, channel 9-12). Doesn't change
+    the module's own auto-send interval configuration — it already sends
+    readings on its own schedule; this just asks for one immediately.</dd>
     <dt><code>{ "cmd": "get_name", "channel": 1 }</code></dt><dd>Request channel name from VelbusLink.</dd>
   </dl>
 </script>

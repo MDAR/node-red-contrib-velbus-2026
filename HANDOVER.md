@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.10.1, 19 nodes, published on npm.**
+Current state at time of writing: **v0.10.2, 19 nodes, published on npm.**
 
 ---
 
@@ -306,7 +306,7 @@ or a string before assuming the parsing logic itself is wrong.
 | `velbus-pir` | Velbus (inputs) | Original-series PIR: VMBPIRO-10, VMBPIRM, VMBPIRC, VMBPIRO |
 | `velbus-pir-20` | Velbus (inputs) | V2 PIR: VMBPIR-20, VMBPIRO-20 |
 | `velbus-meteo` | Velbus (inputs) | Weather station: VMBMETEO |
-| `velbus-sensor` | Velbus (inputs) | Original-series input/analogue: VMB7IN, VMB4AN, VMB6IN |
+| `velbus-sensor` | Velbus (inputs) | Original-series input/analogue: VMB7IN, VMB4AN (channels 1-8 alarm outputs + generic analogue reading on channels 9-12; full sensor/preset config and analog outputs on channels 13-16 remain parked), VMB6IN |
 | `velbus-sensor-20` | Velbus (inputs) | V2 input: VMB8IN-20 |
 | `velbus-blind` | Velbus (outputs) | VMB1BL, VMB2BL |
 | `velbus-blind-s` | Velbus (outputs) | VMB1BLS, VMB2BLE, VMB2BLE-10 |
@@ -588,6 +588,23 @@ Address assignment: allow 500ms, then rescan to confirm the new address took eff
 **Never write in response to a real-time bus event** — an incoming status broadcast is
 not the right trigger for an automatic write-back, both for the EEPROM-wear reason above
 and because it risks a feedback loop. Reads have no such constraint and are always safe.
+
+### 7.8a `VMB4AN` — three similar-sounding packets, only one has the actual value
+
+A real trap, worth remembering for any future work on this module's
+sensor channels (9-12): `0xEA` ("sensor status") sounds like it should be
+the reading, but it's operating-mode/sleep-timer/auto-send configuration
+only — no value field at all. `0xE8`/`0xE9` ("sensor settings") sounds
+promising too, but that's stored preset *configuration*, not a live
+reading. The actual value lives in `0xA9` (`COMMAND_SENSOR_RAW_DATA`,
+labelled "Transmit the sensor raw value" in the PDF) — a completely
+standalone packet with no need to cross-reference either of the other two.
+```
+body[0] = 0xA9, body[1] = channel (9-12)
+body[2] = operating mode (00=voltage, 01=current, 10=resistance, 11=period)
+body[3-5] = 24-bit raw value, MSB first
+  (period mode: 0x000000 = short-circuited, 0xFFFFFF = open-circuit)
+```
 
 ### 7.9 Thermostat commands — always to the primary address
 ```

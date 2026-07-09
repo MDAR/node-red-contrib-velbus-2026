@@ -172,6 +172,34 @@ module.exports = function(RED) {
           break;
         }
 
+        // ── 0xA9  Sensor raw value (VMB4AN channels 9-12 only) ────────────
+        // Confirmed from protocol_vmb4an.pdf, "Transmit the sensor raw
+        // value" — a genuinely standalone packet (COMMAND_SENSOR_RAW_DATA),
+        // not to be confused with 0xEA "sensor status" (that one carries
+        // operating mode / sleep timer / auto-send config, no actual value
+        // at all — a real trap if you assume "status" means "reading").
+        // body[0]=0xA9, body[1]=channel(9-12), body[2]=operating mode,
+        // body[3-5]=24-bit raw value (upper/high/low, MSB first).
+        // Deliberately generic per Stuart's own preference — engineering-
+        // unit conversion (voltage/current/resistance/period) is left to
+        // the flow, not attempted here. The PDF's resolution table (e.g.
+        // 0.25mV/count for voltage) is available in this node's help if
+        // conversion is ever wanted downstream.
+        case 0xA9: {
+          if (!isVMB4AN) return;
+          if (body.length < 6) return;
+
+          const channel  = body[1];
+          const modeCode = body[2] & 0x03;
+          const mode     = ['voltage', 'current', 'resistance', 'period'][modeCode];
+          const raw      = (body[3] << 16) | (body[4] << 8) | body[5];
+
+          const payload = { type: 'analogue', channel, mode, raw };
+
+          node.send([null, { payload }]);
+          break;
+        }
+
         // ── 0xF0/F1/F2  Channel name parts ───────────────────────────────
         case 0xF0:
         case 0xF1:
@@ -219,6 +247,25 @@ module.exports = function(RED) {
         if (!hasCounter) { node.warn('velbus-sensor: this module has no pulse counter'); return; }
         const ch = (parseInt(msg.payload.channel) || 1) - 1; // 0-indexed
         node.bridge.send(pkt(0xF8, node.address, [0xAD, ch]));
+        return;
+      }
+
+      // Request an analogue reading now — VMB4AN channels 9-12 only.
+      // DATABYTE3=0 explicitly means "don't change the auto-send interval
+      // config" per the protocol PDF — this just asks for a value without
+      // side effects on the module's existing auto-send behaviour.
+      // Priority: protocol PDF explicitly states "SID10-SID9 = 11 (lowest
+      // priority)" for this specific command — 0xFB, not the 0xF8 used by
+      // most other commands in this file. Checked directly rather than
+      // assumed, since this is the one place it genuinely differs.
+      if (cmd === 'get_analogue') {
+        if (!isVMB4AN) { node.warn('velbus-sensor: this module has no analogue sensor channels'); return; }
+        const ch = parseInt(msg.payload.channel);
+        if (!ch || ch < 9 || ch > 12) {
+          node.warn('velbus-sensor: get_analogue requires "channel": 9-12');
+          return;
+        }
+        node.bridge.send(pkt(0xFB, node.address, [0xE5, ch, 0x00]));
         return;
       }
 

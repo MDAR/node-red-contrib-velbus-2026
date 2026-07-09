@@ -29,6 +29,53 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.10.2 — 09/07/2026
+
+### velbus-sensor — VMB4AN generic analogue reading (channels 9-12)
+
+- **Prompted by Stuart noticing `isVMB4AN` was defined but never used** —
+  confirmed the sensor-input channels (Group 2 of VMB4AN's three functional
+  groups) produced literally no output at all beforehand; the packet
+  carrying that data wasn't handled anywhere in the file.
+- **Real trap found and avoided:** the obviously-named `0xEA`
+  ("sensor status") packet does **not** carry a value at all — it's
+  operating-mode/sleep-timer/auto-send configuration only. The actual
+  reading lives in a separate, easy-to-miss packet earlier in the protocol
+  document: `0xA9` (`COMMAND_SENSOR_RAW_DATA`, "Transmit the sensor raw
+  value"), genuinely standalone with no need to cross-reference anything
+  else. Also confirmed `0xE8`/`0xE9` ("sensor settings") is preset
+  *configuration* storage, not a live value either — three different
+  packets that could each plausibly have been mistaken for "the reading."
+- Deliberately generic, per explicit preference: emits `{ type: "analogue",
+  channel, mode, raw }` with no engineering-unit conversion attempted —
+  `mode` (voltage/current/resistance/period) and the PDF's resolution
+  table are exposed in the node's help so conversion can happen in the flow
+  instead.
+- New `get_analogue` input command (`0xE5`, request-a-reading-now) — uses
+  the protocol's own "auto-send config byte = 0" option to request a value
+  without side-effecting the module's existing auto-send schedule.
+  **Priority byte corrected during verification:** the protocol PDF
+  explicitly states "SID10-SID9 = 11 (lowest priority)" for this specific
+  command — `0xFB`, not the `0xF8` most other commands in this file use.
+  Checked directly rather than assumed, since this is the one place it
+  genuinely differs from the file's established convention.
+- Both confirmed absent from `VMB7IN`'s own protocol PDF before wiring
+  in — this file's switch statement handles both module types together,
+  so a collision would misfire for `VMB7IN` modules if either byte had
+  been reused there.
+- **Full Group 2 configuration (presets, mode-switching, sleep time,
+  offset, auto-send interval config) and all of Group 3 (analog outputs)
+  remain parked** — see `coverage-roadmap.md` section 6. This is
+  deliberately just the minimal reading piece, not the full feature.
+
+Verified via the mock-RED harness: voltage/period modes, both period
+special-value cases (`0x000000` short-circuit, `0xFFFFFF` open-circuit),
+`VMB7IN` isolation confirmed (same bytes produce no output on that type),
+`get_analogue` checksum hand-verified, correctly rejected on non-VMB4AN
+types. Not yet sent to a real bus.
+
+---
+
 ## v0.10.1 — 09/07/2026
 
 ### Two critical bugs found on real hardware — velbus-dimmer and velbus-glass-panel
