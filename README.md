@@ -52,8 +52,11 @@ npm install node-red-contrib-velbus-2026
 Via local tarball:
 ```bash
 cd ~/.node-red
-npm install /path/to/node-red-contrib-velbus-2026_v0.8.1.tar.gz
+npm install /path/to/node-red-contrib-velbus-2026_vX.Y.Z.tar.gz
 ```
+(replace `X.Y.Z` with whichever version tarball you have — deliberately not
+hardcoded here, since a literal version number in this file has gone stale
+every single time it's been written one before)
 
 ---
 
@@ -68,13 +71,13 @@ npm install /path/to/node-red-contrib-velbus-2026_v0.8.1.tar.gz
 ### Inputs (teal)
 | Node | Modules |
 |---|---|
-| `velbus-glass-panel` | All VMBEL and VMBGP variants — 26 types including OLED, PIR, and original series. Thermostat, LED control, open collector. |
+| `velbus-glass-panel` | All VMBEL and VMBGP variants — 29 types including OLED, PIR, and original series. Thermostat, LED control, open collector. `VMBEL` family only: edge colour control (`set_edge_color`) — applies an already-defined colour across layer/edge/page combinations; defining new custom colours stays in VelbusLink. |
 | `velbus-thermostat` | Dedicated thermostat node for all glass panel modules. |
-| `velbus-button` | VMB8PB, VMB8PBU, VMB6PBN, VMB2PBN, VMB4PB, VMB6PB-20 |
+| `velbus-button` | 12 types across original and V2 series: VMB8PB, VMB8PBU, VMB6PBN, VMB2PBN, VMB4PB, VMB6PB-20, VMB8IR, VMB4PD, VMB4RF, VMBRFR8S, VMBVP01, VMBKP, VMBIN. Lock/unlock and richer status decode where the specific type supports it (not universal); named channels in event output; fixed semantic labels for VMBVP01 (DoorBird). |
 | `velbus-pir` | VMBPIRM, VMBPIRC, VMBPIRO, VMBPIRO-10 |
 | `velbus-pir-20` | VMBPIR-20, VMBPIRO-20 |
 | `velbus-meteo` | VMBMETEO — wind, rain, light, temperature, alarm outputs |
-| `velbus-sensor` | VMB7IN (8 digital inputs + 4 pulse counters), VMB4AN (16-channel analogue/alarm) |
+| `velbus-sensor` | VMB7IN (8 digital inputs + 4 pulse counters), VMB4AN (channels 1-8 alarm outputs + generic analogue reading on channels 9-12 — mode-aware but deliberately no engineering-unit conversion), VMB6IN (6 digital inputs) |
 | `velbus-sensor-20` | VMB8IN-20 (8 digital + 24 alarm channels via subaddresses, energy counters) |
 
 ### Outputs (blue)
@@ -87,7 +90,7 @@ npm install /path/to/node-red-contrib-velbus-2026_v0.8.1.tar.gz
 | `velbus-blind` | VMB1BL, VMB2BL — original series, stop/up/down only |
 | `velbus-blind-s` | VMB1BLS, VMB2BLE, VMB2BLE-10 — full position, lock, force, inhibit |
 | `velbus-blind-20` | VMB2BLE-20 — V2 series with CAN FD support |
-| `velbus-clock` | No fixed module — broadcasts time/date/DST to bus address `0x00`, plus global/local clock alarm (V2 series only) |
+| `velbus-clock` | No fixed module — broadcasts time/date/DST to bus address `0x00`, plus global/local clock alarm and sunrise/sunset enable (V2 series only) |
 | `velbus-energy` | VMBPSUMNGR-20 — power supply manager: PSU load, live wattage/voltage/amperage, warranty counter, PSU alarms (V2 series only) |
 
 ---
@@ -122,6 +125,21 @@ at `/velbus`.
 
 Tested on a live 18-module installation including VMBEL4, VMBELO, VMBELPIR,
 VMBPIR-20, VMB1RYS, and VMB8DC-20. CAN FD modules confirmed working.
+`VMBGPOD` specifically confirmed against two real panels on a separate
+installation, after an earlier gap where it showed as `unknown` in a scan.
+
+---
+
+## Further documentation
+
+- [`HANDOVER.md`](https://github.com/MDAR/node-red-contrib-velbus-2026/blob/main/HANDOVER.md) —
+  comprehensive technical reference for developing this palette: architecture, protocol
+  quirks found the hard way, per-node testing status, and known open issues. Written to
+  assume no prior context.
+- [`CHANGELOG_FORUM.md`](https://github.com/MDAR/node-red-contrib-velbus-2026/blob/main/CHANGELOG_FORUM.md) —
+  full version-by-version development history, including *why* things changed, not just what.
+- [`coverage-roadmap.md`](https://github.com/MDAR/node-red-contrib-velbus-2026/blob/main/coverage-roadmap.md) —
+  every Velbus module type and feature considered for this palette, what's in scope, and why.
 
 ---
 

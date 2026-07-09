@@ -29,6 +29,39 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.10.4 — 09/07/2026
+
+### README.md — fixed real staleness, now publicly visible on the Flow Library
+
+- **Prompted by successfully getting listed on the Node-RED Flow Library**
+  (`flows.nodered.org/node/node-red-contrib-velbus-2026`) — checked the
+  rendered page and found the displayed README was genuinely stale, not a
+  caching artifact: `velbus-glass-panel` still said "26 types" (actually 29),
+  `velbus-button` still listed only the original 6 types (actually 12, plus
+  lock/unlock/status/naming capability added since), `velbus-sensor` didn't
+  mention `VMB6IN` or the new generic analogue reading, `velbus-clock`
+  didn't mention sunrise/sunset, and the tarball install example still
+  hardcoded `v0.8.1`.
+- **Root cause:** `README.md` was fixed once, early on, during initial npm
+  publish prep — then never touched again despite `HANDOVER.md` and
+  `CHANGELOG_FORUM.md` being kept scrupulously current through every
+  subsequent change. This is the user-facing document (visible on both npm
+  and the Flow Library), arguably more consequential to get right than the
+  developer-facing ones, and it drifted the most.
+- **Fixed the specific staleness, and the root cause of it recurring:**
+  the hardcoded tarball version number is now written as `vX.Y.Z` with an
+  explanatory note, rather than a literal version that will go stale again
+  next release exactly as it did this time.
+- Added pointers to `HANDOVER.md`, `CHANGELOG_FORUM.md`, and
+  `coverage-roadmap.md` — none of which were linked from `README.md` at all
+  before, despite being genuinely useful to anyone landing on the repo.
+- Also confirmed, while investigating: the earlier concern about Node-RED's
+  post-2022 scoped-package naming policy did **not** block Flow Library
+  approval — this package is listed successfully under its original
+  unscoped name.
+
+---
+
 ## v0.10.3 — 09/07/2026
 
 ### velbus-glass-panel — VMBEL edge colour control (set_edge_color)
