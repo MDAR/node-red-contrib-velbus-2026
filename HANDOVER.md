@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.9.0, 19 nodes, published on npm.**
+Current state at time of writing: **v0.9.2, 19 nodes, published on npm.**
 
 ---
 
@@ -106,7 +106,7 @@ lib/                       Shared code — protocol utilities and per-module-fam
   dimmer-types.js            Original-series dimmer module type registry
   dimmer-types-20.js         V2 dimmer module type registry (incl. LED grouping mode / Device
                              Type table for VMB4LEDPWM-20)
-  glass-panel-types.js       All 26 glass panel module types in one registry (hasOled/hasPir/
+  glass-panel-types.js       All 27 glass panel module types in one registry (hasOled/hasPir/
                              hasOc/minMapVer flags per type)
   pir-types.js / pir-types-20.js       PIR sensor module type registries
   sensor-types.js / sensor-types-20.js Sensor/meteo module type registries
@@ -266,7 +266,7 @@ or a string before assuming the parsing logic itself is wrong.
 | `velbus-relay-20` | Velbus (outputs) | V2 relays: VMB1RYS-20, VMB4RYLD-20, VMB4RYNO-20 |
 | `velbus-dimmer` | Velbus (outputs) | Original-series dimmers: VMBDMI, VMBDMI-R, VMB4DC |
 | `velbus-dimmer-20` | Velbus (outputs) | V2 dimmers: VMB2DC-20, VMB8DC-20, VMB4LEDPWM-20 (incl. RGB/RGBW grouping mode) |
-| `velbus-glass-panel` | Velbus (inputs) | All 26 glass panel types (original + V2), buttons/OLED/PIR/open-collector as applicable per type |
+| `velbus-glass-panel` | Velbus (inputs) | All 27 glass panel types (original + V2), buttons/OLED/PIR/open-collector as applicable per type |
 | `velbus-thermostat` | Velbus (inputs) | Thermostat function on any glass panel module that has one — same address as the corresponding glass-panel node, coexists without conflict |
 | `velbus-button` | Velbus (inputs) | Dedicated push-button modules: VMB8PB, VMB8PBU, VMB6PBN, VMB2PBN, VMB4PB, VMB6PB-20 |
 | `velbus-pir` | Velbus (inputs) | Original-series PIR: VMBPIRO-10, VMBPIRM, VMBPIRC, VMBPIRO |
@@ -323,13 +323,14 @@ blue (`#4A90D9`).
 | 0x44 | VMB4PB | velbus-button |
 | 0x4C | VMB6PB-20 | velbus-button |
 
-### Glass panels (all → velbus-glass-panel, 26 types)
+### Glass panels (all → velbus-glass-panel, 27 types)
 | Type byte | Module | OLED | PIR | Open collector | Min. map version |
 |---|---|---|---|---|---|
 | 0x1E | VMBGP1 | no | no | unconfirmed¹ | — |
 | 0x1F | VMBGP2 | no | no | unconfirmed¹ | — |
 | 0x20 | VMBGP4 | no | no | unconfirmed¹ | — |
 | 0x21 | VMBGPO | yes | no | yes | 2 |
+| 0x28 | VMBGPOD | yes | no | no | — |
 | 0x2D | VMBGP4PIR | no | yes | unconfirmed¹ | — |
 | 0x34 | VMBEL1 | no | no | yes | 2 |
 | 0x35 | VMBEL2 | no | no | yes | 2 |
@@ -602,7 +603,7 @@ about why in the commit message.
 
 - **Generational split.** Nodes generally split at the V2.0 boundary — one node for
   original-series, a separate node for V2. **Exceptions:** `velbus-glass-panel` (one
-  node covers all 26 types, both generations, via the type registry's per-type flags
+  node covers all 27 types, both generations, via the type registry's per-type flags
   rather than a code-level split), `velbus-thermostat` (covers the thermostat function
   on any glass panel type), `velbus-meteo` (only one generation exists), and the blind
   family (`velbus-blind` / `velbus-blind-s` / `velbus-blind-20`, split by actual protocol
@@ -770,6 +771,14 @@ orientation at the time of writing:
 
 ## 13. Known open issues
 
+- **`VMBKP` (0x42, "Keypad interface module") has no node at all.** Found scanning a
+  real installation (Stuart's home) alongside the `VMBGPOD` gap below — a genuinely new
+  module type, not yet scoped. Its protocol PDF (`protocol_vmbkp.pdf`, 28 pages) is
+  substantial: channel status, module status, and a full per-channel LED control layer
+  (clear/set/slow-blink/fast-blink/very-fast-blink), similar in spirit to `velbus-button`
+  but with LED feedback control `velbus-button` doesn't have. This needs the same
+  "how much work would this involve" scoping pass `velbus-energy` got before it was
+  built, not a quick bolt-on to an existing node.
 - **Open-collector support** on several glass panel types (marked "unconfirmed" in the
   registry in section 6) has not been verified against real hardware — the protocol PDFs
   are ambiguous or silent on some of these. Sending `0x01`/`0x02`/`0x03` open-collector
