@@ -29,6 +29,44 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.9.4 — 09/07/2026
+
+### velbus-button — critical bug, live since v0.5.2: button events shifted by one byte
+
+- **Found while scoping VMBKP's decode logic, not reported directly** — checking
+  `velbus-button.js` as a template surfaced that its `0x00` handler read
+  `body[0]`/`body[1]`/`body[2]` for pressed/released/long-pressed, when
+  `body[0]` is always the command byte itself (always `0x00`, per this
+  project's own most-repeated rule — see `HANDOVER.md` section 4.3). Every
+  field was reading one byte too early.
+- **Real impact, not theoretical:** `pressed` was always empty (reading the
+  constant command byte), `released` was actually reporting what DATABYTE2
+  (the real "pressed" bitmask) contained, `longPressed` was reporting what
+  DATABYTE3 (the real "released" bitmask) contained, and the real
+  DATABYTE4 (long-press bitmask) was never read at all. The `on` field
+  followed the same corruption — it could report `true` on a release and
+  never correctly on an immediate press.
+- **Confirmed live since `velbus-button`'s introduction in v0.5.2** — this
+  is not a new regression, it has been shipping incorrect button-event data
+  for the entire time this node has existed. `velbus-glass-panel`'s own
+  `0x00` handler was checked immediately afterward and confirmed **not**
+  affected — it already used the correct `body[1]`/`body[2]`/`body[3]`
+  indexing, so this was isolated to one file, not systemic.
+- **Fixed and verified with a real repro, not just a corrected read of the
+  code:** built a mock-harness test that reproduces the exact failure first
+  (channel 3 pressed came back reported as "released") before applying the
+  fix, then re-ran the same test plus three more (release, long-press,
+  simultaneous multi-channel press) to confirm all four now report
+  correctly.
+- **If you have flows depending on `velbus-button`'s `pressed`/`released`/
+  `longPressed` distinction** (rather than just the `on` boolean, or
+  scanning/discovery, which were unaffected), check them after updating —
+  behaviour that previously "worked" by only watching `on`, or by
+  compensating for the shift some other way in the flow itself, may now
+  behave differently now that the underlying data is actually correct.
+
+---
+
 ## v0.9.3 — 09/07/2026
 
 ### velbus-scan — VMBGPOD still showed "unknown_0x28" after the v0.9.2 fix

@@ -262,6 +262,22 @@ implementing a new packet handler, always write out the DATABYTE-to-`body[]` ind
 mapping explicitly as a comment before writing the parsing logic — it is not something
 to trust from memory or infer quickly.
 
+**The canonical real example: `velbus-button` shipped this exact bug from its very
+first version (v0.5.2) until v0.9.4** — over 30 versions, undetected. Its `0x00`
+handler read `body[0]`/`body[1]`/`body[2]` for pressed/released/long-pressed, when the
+correct indices are `body[1]`/`body[2]`/`body[3]`. The practical effect: `pressed` was
+always empty (silently reading the constant command byte), `released` actually reported
+what was really the pressed bitmask, `longPressed` reported what was really the released
+bitmask, and the real long-press data was never read at all. It went unnoticed for this
+long specifically because `velbus-glass-panel`'s own, separately-written `0x00` handler
+got the indexing right from the start, and nobody had directly exercised
+`velbus-button`'s press/release distinction against real hardware — only its
+scan/discovery path (`0xFF`/`0xB0`, handled entirely separately) had seen real traffic.
+A bug in one packet handler is invisible from the outside if nothing forces that
+specific handler to run against real data. If you're verifying a node, verify the
+specific packet type you care about — passing scan/discovery doesn't imply anything
+about a different command byte's handler in the same file.
+
 ### 4.4 Address format
 
 Module addresses are stored as **hex strings in the editor's dropdown UI** (e.g.
@@ -778,6 +794,11 @@ orientation at the time of writing:
   `VMBGPOD` (0x28) specifically confirmed 09/07/2026 against two real panels on
   Stuart's own home bus, closing out the v0.9.2/v0.9.3 registry-gap saga with an
   actual result rather than just a passing test.
+- **`velbus-button` had a critical, real bug from its first version until v0.9.4** —
+  see section 4.3 for the full story. Its press/release/long-press decode is now
+  fixed and verified with a real repro, but has not yet been re-confirmed against a
+  live button press on real hardware (only via the mock harness) — worth doing
+  before trusting it fully, given how long the broken version went unnoticed.
 - **Mock-harness verified only, not yet confirmed against a real bus:** `velbus-clock`
   (both the time/date/DST broadcast and the `set_alarm` command), the
   `velbus-dimmer-20` `get_device_type` read command, and `velbus-energy` in its

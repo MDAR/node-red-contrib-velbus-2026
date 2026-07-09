@@ -76,11 +76,12 @@ module.exports = function(RED) {
 
       // 0x00 — button press / release / long-press
       if (cmd === 0x00) {
-        if (body.length < 2) return;
+        if (body.length < 3) return;
 
-        const pressed     = bitsToChannels(body[0]);
-        const released    = bitsToChannels(body[1]);
-        const longPressed = body.length >= 3 ? bitsToChannels(body[2]) : [];
+        // body[0]=0x00 cmd, body[1]=DB2 pressed, body[2]=DB3 released, body[3]=DB4 long
+        const pressed     = bitsToChannels(body[1]);
+        const released    = bitsToChannels(body[2]);
+        const longPressed = body.length >= 4 ? bitsToChannels(body[3]) : [];
 
         const on = pressed.length > 0 || longPressed.length > 0;
 
