@@ -14,6 +14,40 @@ All feedback via GitHub issues, with examples and debug captures where possible.
 
 ---
 
+## v0.9.2 — 09/07/2026
+
+### velbus-glass-panel — VMBGPOD (0x28) registry gap fixed
+
+- **Found by Stuart:** scanning his own home installation showed `unknown_0x28`
+  for three real modules — the palette had never included this type at all.
+- **Real-world significance:** per the VLP training dataset analysed earlier
+  in this project, VMBGPOD is one of the **most common** glass panel types
+  in the field (978 occurrences, second only to VMB4RYLD and VMBDMI-R) — a
+  genuine, consequential gap, not an edge case. Only its V2 sibling
+  (`VMBGPOD-2`, 0x3D) had ever been added.
+- Added to both `lib/glass-panel-types.js` (server-side) and the duplicate
+  type list in `velbus-glass-panel.html` (editor-side dropdown/display) —
+  confirmed both needed updating, not just one.
+- **Confirmed from protocol_vmbgpod.pdf:** OLED display present; no
+  open-collector commands anywhere in the document (distinct from `VMBGPO`,
+  0x21, a different product despite the similar name — that one does have
+  OC support).
+- **One real mistake caught and corrected before shipping:** first pass
+  copied the channel count (32) from `VMBGPO` on the assumption it was the
+  closest sibling. Cross-checking the editor's own duplicate type list
+  before finalising showed `VMBGPOD-2` — the *actual* V2 sibling of this
+  same product line — lists 4 channels, not 32. Corrected to 4. Worth
+  remembering: when modelling a new registry entry on an existing one,
+  check for a same-name generational sibling before assuming the
+  closest-looking name is the right reference.
+- Also identified in the same scan, **not yet added:** `VMBKP` (0x42,
+  "Keypad interface module") — a substantial 28-page protocol with its own
+  per-channel LED control layer, genuinely new territory rather than a
+  quick registry addition. Flagged for separate scoping, same approach as
+  velbus-energy before it was built.
+
+---
+
 ## v0.9.1 — 08/07/2026
 
 ### Address validation bug — 12 of 19 node types, any address ≥100 decimal
