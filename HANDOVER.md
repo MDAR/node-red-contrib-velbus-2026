@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.10.4, 19 nodes, published on npm.**
+Current state at time of writing: **v0.10.5, 19 nodes, published on npm.**
 
 ---
 
@@ -1123,6 +1123,17 @@ git push --tags
 - **British English** throughout documentation and in-editor help text (this is a
   British-developed project for what is predominantly a European/UK installer base —
   purely a style convention, not a functional requirement).
+- **`examples/*.json` must not use any node type from outside this package plus Node-RED
+  core** — confirmed from the official docs, not a guess. Found the hard way (v0.10.5):
+  the original example used seven Dashboard 2 widget types, a genuine third-party
+  dependency, which is almost certainly why the Flow Library's evaluator didn't count
+  this package as having any examples at all despite a real file existing. Stick to
+  `inject`/`debug`/`comment`/`function` plus this package's own nodes. Also check field
+  names against the actual current node `.html` defaults before writing an example —
+  the same file had drifted to stale `address`/`channel`/`tls` field names that the
+  real nodes had already moved on from (`moduleAddr`/`startChannel`/`channelCount`/
+  `useTLS`), meaning the old example wouldn't have worked correctly even without the
+  Dashboard problem.
 
 ---
 

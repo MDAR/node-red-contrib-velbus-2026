@@ -1,0 +1,137 @@
+[
+  {
+    "id": "tab-velbus-relay-example",
+    "type": "tab",
+    "label": "Velbus: Scan & Relay Control",
+    "disabled": false,
+    "info": "Scans the bus for modules, then controls a single relay channel — on, off, and toggle (toggle is tracked internally by the node, not a Velbus wire command).\n\nBefore using:\n1. Edit the 'Velbus Gateway' config node (double-click any velbus-* node, then the pencil icon next to Bridge) with your gateway's host/port.\n2. Deploy, then click 'Scan bus' to discover modules — watch the debug sidebar for results.\n3. Open the 'Relay ch1' node and set its Module Address to a real relay from the scan results.\n4. Re-deploy, then use the On / Off / Toggle inject buttons.\n\nUses only core Node-RED nodes (inject, debug, function, comment) plus this package's own nodes — no other palette required."
+  },
+
+  {
+    "id": "bridge-relay-example",
+    "type": "velbus-bridge",
+    "name": "Velbus Gateway",
+    "host": "127.0.0.1",
+    "port": "6000",
+    "useTLS": false,
+    "useAuth": false,
+    "authKey": "",
+    "certPath": "",
+    "keyPath": ""
+  },
+
+  {
+    "id": "comment-scan",
+    "type": "comment",
+    "z": "tab-velbus-relay-example",
+    "name": "STEP 1 — Scan the bus",
+    "info": "Click once to discover every module on the bus. Results appear in the debug sidebar — use them to find your relay's real address.",
+    "x": 180, "y": 60,
+    "wires": []
+  },
+  {
+    "id": "inject-scan",
+    "type": "inject",
+    "z": "tab-velbus-relay-example",
+    "name": "Scan bus",
+    "props": [{ "p": "payload" }],
+    "repeat": "", "crontab": "", "once": false, "onceDelay": 0.1,
+    "topic": "", "payload": "{}", "payloadType": "json",
+    "x": 150, "y": 120,
+    "wires": [["scan-example"]]
+  },
+  {
+    "id": "scan-example",
+    "type": "velbus-scan",
+    "z": "tab-velbus-relay-example",
+    "name": "Bus scan",
+    "bridge": "bridge-relay-example",
+    "x": 340, "y": 120,
+    "wires": [["debug-scan"]]
+  },
+  {
+    "id": "debug-scan",
+    "type": "debug",
+    "z": "tab-velbus-relay-example",
+    "name": "Scan results",
+    "active": true, "tosidebar": true, "console": false, "tostatus": false,
+    "complete": "payload", "targetType": "msg",
+    "x": 550, "y": 120,
+    "wires": []
+  },
+
+  {
+    "id": "comment-relay",
+    "type": "comment",
+    "z": "tab-velbus-relay-example",
+    "name": "STEP 2 — Relay control",
+    "info": "Set the relay node's Module Address to a real relay found in the scan above, then use the buttons below. 'Toggle' is handled entirely inside the node — it remembers the relay's last known state and flips it, so no separate logic is needed here.",
+    "x": 180, "y": 220,
+    "wires": []
+  },
+  {
+    "id": "inject-relay-on",
+    "type": "inject",
+    "z": "tab-velbus-relay-example",
+    "name": "On",
+    "props": [{ "p": "payload" }],
+    "repeat": "", "crontab": "", "once": false, "onceDelay": 0.1,
+    "topic": "", "payload": "{\"channel\":1,\"cmd\":\"on\"}", "payloadType": "json",
+    "x": 140, "y": 280,
+    "wires": [["relay-example"]]
+  },
+  {
+    "id": "inject-relay-off",
+    "type": "inject",
+    "z": "tab-velbus-relay-example",
+    "name": "Off",
+    "props": [{ "p": "payload" }],
+    "repeat": "", "crontab": "", "once": false, "onceDelay": 0.1,
+    "topic": "", "payload": "{\"channel\":1,\"cmd\":\"off\"}", "payloadType": "json",
+    "x": 140, "y": 320,
+    "wires": [["relay-example"]]
+  },
+  {
+    "id": "inject-relay-toggle",
+    "type": "inject",
+    "z": "tab-velbus-relay-example",
+    "name": "Toggle",
+    "props": [{ "p": "payload" }],
+    "repeat": "", "crontab": "", "once": false, "onceDelay": 0.1,
+    "topic": "", "payload": "{\"channel\":1,\"cmd\":\"toggle\"}", "payloadType": "json",
+    "x": 150, "y": 360,
+    "wires": [["relay-example"]]
+  },
+  {
+    "id": "relay-example",
+    "type": "velbus-relay",
+    "z": "tab-velbus-relay-example",
+    "name": "Relay ch1",
+    "bridge": "bridge-relay-example",
+    "moduleAddr": "",
+    "startChannel": 1,
+    "channelCount": 1,
+    "x": 380, "y": 320,
+    "wires": [["debug-relay-status"], ["debug-relay-warnings"]]
+  },
+  {
+    "id": "debug-relay-status",
+    "type": "debug",
+    "z": "tab-velbus-relay-example",
+    "name": "Relay status",
+    "active": true, "tosidebar": true, "console": false, "tostatus": false,
+    "complete": "payload", "targetType": "msg",
+    "x": 600, "y": 300,
+    "wires": []
+  },
+  {
+    "id": "debug-relay-warnings",
+    "type": "debug",
+    "z": "tab-velbus-relay-example",
+    "name": "Relay warnings",
+    "active": true, "tosidebar": true, "console": false, "tostatus": false,
+    "complete": "payload", "targetType": "msg",
+    "x": 610, "y": 360,
+    "wires": []
+  }
+]

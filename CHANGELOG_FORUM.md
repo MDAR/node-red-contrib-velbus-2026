@@ -29,6 +29,42 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.10.5 — 09/07/2026
+
+### Fixed the "no examples" Flow Library evaluation flag
+
+- **Prompted by the Node-RED Flow Library evaluator flagging this package as
+  having no examples**, despite `examples/velbus-basic-relay-dimmer.json`
+  genuinely existing with real flow content. Checked the official docs
+  rather than guess at the cause: example flows must **"not use any other
+  3rd party nodes that need to be installed."** The existing example used
+  seven Dashboard 2 node types (`ui-base`, `ui-group`, `ui-page`,
+  `ui-slider`, `ui-switch`, `ui-text`, `ui-theme`) — a genuine third-party
+  dependency this package doesn't include, which almost certainly explains
+  why the evaluator didn't count it as valid.
+- **A second, independent staleness found while rebuilding it:** the old
+  example's `velbus-relay`/`velbus-dimmer-20` nodes used field names
+  `address`/`channel` — checked the actual current node definitions
+  directly, which use `moduleAddr`/`startChannel`/`channelCount`. The
+  `velbus-bridge` node used `"tls"` where the real field is `"useTLS"`.
+  This example would not have worked correctly even before the Dashboard
+  issue, on top of not counting toward the evaluator.
+- **Replaced with two short, self-contained examples**, per the "should be
+  short" guidance in the official docs, using only core Node-RED nodes
+  (`inject`/`debug`/`comment`) plus this package's own nodes — no other
+  palette required to run either one:
+  - `velbus-scan-and-relay.json` — bus scan, then on/off/toggle relay
+    control (toggle demonstrates the node's own internal state tracking,
+    not a wire command)
+  - `velbus-dimmer-levels.json` — preset-percentage dimmer control
+- Every field name and command verified directly against the actual current
+  node code before writing the flow — not carried over from the old,
+  already-stale example. Both files validated: proper JSON, every wire and
+  config reference resolves to a real node, only the expected node types
+  present.
+
+---
+
 ## v0.10.4 — 09/07/2026
 
 ### README.md — fixed real staleness, now publicly visible on the Flow Library

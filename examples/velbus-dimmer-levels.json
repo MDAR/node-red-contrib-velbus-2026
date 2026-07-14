@@ -1,0 +1,111 @@
+[
+  {
+    "id": "tab-velbus-dimmer-example",
+    "type": "tab",
+    "label": "Velbus: Dimmer Level Control",
+    "disabled": false,
+    "info": "Sets a V2-series dimmer to a series of preset levels and shows the resulting status feedback.\n\nBefore using:\n1. Edit the 'Velbus Gateway' config node with your gateway's host/port.\n2. Open the 'Dimmer ch1' node and set its Module Address to a real V2 dimmer (e.g. VMB4DC-20, VMBDMI-20).\n3. Re-deploy, then try the preset-level inject buttons.\n\nUses only core Node-RED nodes (inject, debug, comment) plus this package's own nodes — no other palette required."
+  },
+
+  {
+    "id": "bridge-dimmer-example",
+    "type": "velbus-bridge",
+    "name": "Velbus Gateway",
+    "host": "127.0.0.1",
+    "port": "6000",
+    "useTLS": false,
+    "useAuth": false,
+    "authKey": "",
+    "certPath": "",
+    "keyPath": ""
+  },
+
+  {
+    "id": "comment-dimmer",
+    "type": "comment",
+    "z": "tab-velbus-dimmer-example",
+    "name": "Preset dimmer levels",
+    "info": "Each button sends a 'set' command with a target percentage. The dimmer node fades to that level itself — no ramping logic needed in the flow. Watch the debug sidebar for status updates as the level changes.",
+    "x": 180, "y": 60,
+    "wires": []
+  },
+
+  {
+    "id": "inject-dim-0",
+    "type": "inject",
+    "z": "tab-velbus-dimmer-example",
+    "name": "Off (0%)",
+    "props": [{ "p": "payload" }],
+    "repeat": "", "crontab": "", "once": false, "onceDelay": 0.1,
+    "topic": "", "payload": "{\"channel\":1,\"cmd\":\"set\",\"percent\":0}", "payloadType": "json",
+    "x": 150, "y": 140,
+    "wires": [["dimmer-example"]]
+  },
+  {
+    "id": "inject-dim-25",
+    "type": "inject",
+    "z": "tab-velbus-dimmer-example",
+    "name": "25%",
+    "props": [{ "p": "payload" }],
+    "repeat": "", "crontab": "", "once": false, "onceDelay": 0.1,
+    "topic": "", "payload": "{\"channel\":1,\"cmd\":\"set\",\"percent\":25}", "payloadType": "json",
+    "x": 140, "y": 180,
+    "wires": [["dimmer-example"]]
+  },
+  {
+    "id": "inject-dim-50",
+    "type": "inject",
+    "z": "tab-velbus-dimmer-example",
+    "name": "50%",
+    "props": [{ "p": "payload" }],
+    "repeat": "", "crontab": "", "once": false, "onceDelay": 0.1,
+    "topic": "", "payload": "{\"channel\":1,\"cmd\":\"set\",\"percent\":50}", "payloadType": "json",
+    "x": 140, "y": 220,
+    "wires": [["dimmer-example"]]
+  },
+  {
+    "id": "inject-dim-100",
+    "type": "inject",
+    "z": "tab-velbus-dimmer-example",
+    "name": "Full (100%)",
+    "props": [{ "p": "payload" }],
+    "repeat": "", "crontab": "", "once": false, "onceDelay": 0.1,
+    "topic": "", "payload": "{\"channel\":1,\"cmd\":\"set\",\"percent\":100}", "payloadType": "json",
+    "x": 160, "y": 260,
+    "wires": [["dimmer-example"]]
+  },
+
+  {
+    "id": "dimmer-example",
+    "type": "velbus-dimmer-20",
+    "z": "tab-velbus-dimmer-example",
+    "name": "Dimmer ch1",
+    "bridge": "bridge-dimmer-example",
+    "moduleAddr": "",
+    "startChannel": 1,
+    "channelCount": 1,
+    "ledMode": "single",
+    "x": 380, "y": 200,
+    "wires": [["debug-dimmer-status"], ["debug-dimmer-warnings"]]
+  },
+  {
+    "id": "debug-dimmer-status",
+    "type": "debug",
+    "z": "tab-velbus-dimmer-example",
+    "name": "Dimmer status",
+    "active": true, "tosidebar": true, "console": false, "tostatus": false,
+    "complete": "payload", "targetType": "msg",
+    "x": 610, "y": 180,
+    "wires": []
+  },
+  {
+    "id": "debug-dimmer-warnings",
+    "type": "debug",
+    "z": "tab-velbus-dimmer-example",
+    "name": "Dimmer warnings",
+    "active": true, "tosidebar": true, "console": false, "tostatus": false,
+    "complete": "payload", "targetType": "msg",
+    "x": 620, "y": 240,
+    "wires": []
+  }
+]
