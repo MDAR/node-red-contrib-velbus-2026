@@ -10,6 +10,10 @@
       address:    { value: '', required: true, validate: function(v) { const n = parseInt(v, 16); return !isNaN(n) && n >= 1 && n <= 254; } },
       moduleName: { value: '' },
       serial:     { value: '0001' },
+      dimSpeedCh1: { value: 4, validate: RED.validators.number() },
+      dimSpeedCh2: { value: 4, validate: RED.validators.number() },
+      dimSpeedCh3: { value: 4, validate: RED.validators.number() },
+      dimSpeedCh4: { value: 4, validate: RED.validators.number() },
     },
     inputs:  1,
     outputs: 1,
@@ -58,6 +62,21 @@
     <span style="font-family:monospace;">2446</span>
     <span style="color:#888; font-size:0.85em;"> (fixed — real, VelbusLink-recognised VMB4DC build, not editable)</span>
   </div>
+  <div class="form-row">
+    <label style="width:100%"><i class="fa fa-clock-o"></i> Long-press dim speed (seconds for a full 0-100% ramp)</label>
+  </div>
+  <div class="form-row" style="padding-left:20px">
+    <label for="node-input-dimSpeedCh1" style="width:70px">Channel 1</label>
+    <input type="text" id="node-input-dimSpeedCh1" style="width:60px">
+    <label for="node-input-dimSpeedCh2" style="width:70px; margin-left:12px;">Channel 2</label>
+    <input type="text" id="node-input-dimSpeedCh2" style="width:60px">
+  </div>
+  <div class="form-row" style="padding-left:20px">
+    <label for="node-input-dimSpeedCh3" style="width:70px">Channel 3</label>
+    <input type="text" id="node-input-dimSpeedCh3" style="width:60px">
+    <label for="node-input-dimSpeedCh4" style="width:70px; margin-left:12px;">Channel 4</label>
+    <input type="text" id="node-input-dimSpeedCh4" style="width:60px">
+  </div>
 </script>
 
 <script type="text/html" data-help-name="velbus-emulate-dimmer">
@@ -86,14 +105,25 @@
     most direct reuse of proven logic: <code>VMB4DC</code>.
   </p>
   <p>
-    <strong>What's deliberately not here:</strong> forced-on/off, inhibit, and
-    fade-time animation are all accepted at the protocol level (so a real
-    command referencing them doesn't error) but not genuinely modelled — the
-    emulator jumps straight to a commanded level rather than ramping, and
-    reports plain "normal" run mode always. Program Steps (the memory-based
-    Action system behind real link behaviours like dim-on-long-press) are
-    entirely out of scope, same reasoning as <code>velbus-emulate-button-io</code> —
-    see that node's help for the full explanation.
+    <strong>Action-assignment engine</strong> (added after this section was
+    first written): this module genuinely reacts to real bus events per the
+    links VelbusLink writes into its own memory — Toggle (<code>0103</code>),
+    Dim at long press/toggle at short press (<code>0202</code>), and
+    Atmospheric dimvalue (<code>0214</code>) are all confirmed and
+    implemented, including a real continuous ramp for long-press dimming
+    (see the "Long-press dim speed" setting below) — not a step
+    approximation. Forced-on/off, Inhibit, and the dimmer-specific timer
+    family are scoped but not yet individually byte-confirmed; unrecognised
+    action bytes are ignored rather than guessed at. Program *groups*
+    (Summer/Winter/Holiday schedule selection) and full time/date scheduling
+    remain genuinely out of scope — see <code>HANDOVER.md</code> section 17
+    for the complete reasoning and confirmed action tables.
+  </p>
+  <p>
+    <strong>Direct level-set commands</strong> (<code>0x07</code>, whether
+    from a real link's simple actions or the input below) still jump
+    straight to the target level rather than ramping — only the long-press
+    gesture ramps continuously, matching real button behaviour.
   </p>
 
   <h3>Setup</h3>
@@ -103,6 +133,15 @@
     <li>Program a link in VelbusLink against it, or drive it directly from the
     input below to simulate a "set level" command arriving from elsewhere.</li>
   </ol>
+
+  <h3>Long-press dim speed</h3>
+  <p>
+    Real VMB4DC hardware only offers a fixed 4 or 8 second full-range dim
+    speed. Configurable per channel here instead, in seconds for a complete
+    0-100% ramp — any value, not limited to those two. Only affects the
+    continuous ramp triggered by a long-press gesture on a linked
+    <code>0202</code> action; direct level-set commands are unaffected.
+  </p>
 
   <h3>Input — simulate a level change</h3>
   <pre>

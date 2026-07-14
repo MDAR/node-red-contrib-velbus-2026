@@ -48,6 +48,17 @@ module.exports = function(RED) {
     node.buildYear = 0x24;
     node.buildWeek = 0x46;
 
+    // Real VMB4DC hardware offers only a binary choice — a fixed 4 or 8
+    // second full-range dim speed. Genuinely configurable per channel here
+    // instead, in seconds for a full 0-100% ramp — not limited to either
+    // of those two fixed values. Applies to the continuous long-press ramp
+    // (0202) below; defaults to 4s, matching one of the two real-hardware
+    // options as a sensible starting point.
+    node.dimSpeed = [1, 2, 3, 4].map(function(ch) {
+      const v = parseFloat(config['dimSpeedCh' + ch]);
+      return (Number.isFinite(v) && v > 0) ? v : 4;
+    });
+
     if (!node.bridge) {
       node.status({ fill: 'red', shape: 'ring', text: 'no bridge' });
       node.error('velbus-emulate-dimmer: no bridge configured');
@@ -187,16 +198,23 @@ module.exports = function(RED) {
       }
     }
 
+    const DIM_TICK_MS = 200; // fixed tick granularity; step size varies by channel instead
+
     function startDimRamp(ch) {
       const idx = ch - 1;
       if (_dimRampInterval[idx]) return; // already ramping, a repeated 'long' event while held shouldn't restart it
       _dimLastDirection[idx] *= -1; // alternate direction from the previous long-press gesture
       const direction = _dimLastDirection[idx];
+      // Step size derived from this channel's configured dim speed (seconds
+      // for a full 0-100% ramp) — not the fixed 4s/8s binary choice real
+      // VMB4DC hardware offers. E.g. 4s / 200ms ticks = 20 ticks for 100%,
+      // so 5% per tick; 8s = 2.5% per tick; any value works, not just those two.
+      const stepPercent = 100 / ((node.dimSpeed[idx] * 1000) / DIM_TICK_MS);
       _dimRampInterval[idx] = setInterval(function() {
-        const next = Math.max(0, Math.min(100, _levels[idx] + (direction * 5)));
-        setLevel(ch, next);
-        if (next === 0 || next === 100) stopDimRamp(idx); // condition A: full on/off reached
-      }, 200);
+        const next = Math.max(0, Math.min(100, _levels[idx] + (direction * stepPercent)));
+        setLevel(ch, Math.round(next));
+        if (next <= 0 || next >= 100) stopDimRamp(idx); // condition A: full on/off reached
+      }, DIM_TICK_MS);
     }
 
     // ── Action-assignment engine ─────────────────────────────────────────

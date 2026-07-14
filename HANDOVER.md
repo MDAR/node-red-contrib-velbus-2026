@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.12.1, 21 nodes, published on npm.**
+Current state at time of writing: **v0.12.2, 21 nodes, published on npm.**
 
 ---
 
@@ -1424,12 +1424,21 @@ details:
     by anything except the specific cancel/toggle-forced actions.
   - `VMB4DC`'s `0202` implements the real gesture: press waits, a
     long-press starts a genuine `setInterval`-driven continuous ramp
-    (5%/200ms) that stops at a boundary or on release, whichever comes
-    first, and release with no long-press in that gesture triggers Toggle
-    instead. Direction alternates each new long-press gesture (an
-    interpretation of "opposite direction" as relative to the previous
-    ramp, not the current level — flagged as worth confirming if that
-    wasn't the intent).
+    (fixed 200ms tick, step size computed per-channel from a configurable
+    dim speed — see below) that stops at a boundary or on release,
+    whichever comes first, and release with no long-press in that gesture
+    triggers Toggle instead. Direction alternates each new long-press
+    gesture (an interpretation of "opposite direction" as relative to the
+    previous ramp, not the current level — flagged as worth confirming if
+    that wasn't the intent).
+  - **Long-press dim speed is genuinely configurable per channel (v0.12.2)**
+    — real `VMB4DC` hardware only offers a fixed 4 or 8 second full-range
+    choice; here it's 4 separate config fields (`dimSpeedCh1`-`4`, seconds
+    for a complete 0-100% ramp, default 4s), not limited to either of
+    those two values. Only the tick's step size varies by channel; the
+    200ms tick interval itself stays fixed. Only affects the long-press
+    ramp — direct `0x07` level-set commands still jump straight to target,
+    unaffected by this setting.
 - Verified via the mock-RED harness end-to-end for both emulators: a real
   VelbusLink-style write sequence populating a link entry, followed by a
   genuine bus-wide event from an unrelated module address, confirmed to

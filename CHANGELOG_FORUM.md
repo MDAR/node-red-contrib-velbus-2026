@@ -29,6 +29,36 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.12.2 — 14/07/2026
+
+### Configurable per-channel long-press dim speed
+
+- **Requested by Stuart**: real VMB4DC hardware only offers a fixed 4 or 8
+  second full-range dim speed — genuinely configurable per channel now
+  instead, not limited to either of those two values.
+- Added 4 new config fields (`dimSpeedCh1`-`dimSpeedCh4`, seconds for a
+  complete 0-100% ramp, default 4s each). The ramp's tick interval stays
+  fixed (200ms) — only the step size per tick varies by channel, computed
+  from the configured speed, so any duration works cleanly rather than
+  being limited to values the fixed tick size divides evenly.
+- Applies specifically to the continuous ramp triggered by a long-press
+  gesture on a linked `0202` action — direct level-set commands (`0x07`)
+  are unaffected, still jumping straight to the target level as before.
+- **Corrected stale help text found while documenting this**: the dimmer's
+  own help page still said Program Steps were "entirely out of scope" and
+  that the emulator "jumps straight to a commanded level rather than
+  ramping" — both were true when originally written but became wrong once
+  the Action-assignment engine and genuine long-press ramping were built
+  (v0.12.0/v0.12.1). Corrected to describe what's actually implemented now.
+- Verified via the mock-RED harness: a 4-second-configured channel and an
+  8-second-configured channel, both started from the same level and
+  long-pressed simultaneously, confirmed to ramp at proportionally
+  different rates (roughly 2:1, matching the configured speed ratio) after
+  a single tick — checked against raw packet contents, not just that the
+  code runs.
+
+---
+
 ## v0.12.1 — 14/07/2026
 
 ### Both v0.12.0 simplifications replaced with genuine behaviour
