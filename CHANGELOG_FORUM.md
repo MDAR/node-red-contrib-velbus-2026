@@ -29,6 +29,48 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.11.4 — 14/07/2026
+
+### Both emulators now persist memory across Node-RED restarts — with two real corrections along the way
+
+- **Prompted by a direct question**: does the v0.11.3 memory image survive a
+  Node-RED restart? Honest answer at the time: no — plain in-memory state,
+  wiped on every restart or redeploy.
+- **First design, corrected before it shipped**: initially persisted output/
+  dim-level state too, reasoning "real modules hold state across a power
+  cycle." **Wrong, corrected by Stuart**: real modules "start safe" — outputs
+  off at boot, full stop. The one real exception is newer firmware
+  persisting a *Forced Off* safety state specifically, which doesn't apply
+  here since forced/inhibit states aren't modelled in this emulator at all.
+  Outputs and dim levels never persist; only the memory image does, since
+  that's genuinely EEPROM-backed on real hardware (channel names, link
+  configuration) while output/level state isn't.
+- **Second correction**: initially called `context.set()` synchronously on
+  every single memory write, reasoning the configured `localfilesystem`
+  context store batches its own disk writes anyway. **Flagged as worth not
+  assuming** — a full VelbusLink config sync could mean 256+ writes in a
+  row, and controlling actual write frequency explicitly is safer than
+  relying on unverified internal batching behaviour. Redesigned as a dirty
+  flag plus a 30-second interval (matching the context store's own
+  documented flush cadence) — the interval only calls `context.set()` if
+  something actually changed since the last one, and a final flush happens
+  on node close so a clean redeploy doesn't lose the last few seconds of
+  writes.
+- Uses `node.context()` (node-scoped, not flow/global) — this state
+  belongs to one emulator instance, not shared across others. Falls back
+  silently to Node-RED's default in-memory context if no persistent store
+  is configured in `settings.js` — not a regression, just no improvement
+  without one.
+- Verified via the mock-RED harness with a captured `setInterval` callback
+  (fired manually rather than waiting 30 real seconds): confirmed no
+  `context.set()` call happens immediately after a write, confirmed it does
+  happen once the interval fires, and confirmed a simulated restart (fresh
+  node instance sharing the same mock context store) correctly restores
+  memory while correctly resetting outputs/levels to safe — not just that
+  the code runs, but the actual timing and reset behaviour checked directly.
+
+---
+
 ## v0.11.3 — 14/07/2026
 
 ### Fixed: both emulators didn't respond to VelbusLink's memory dump at all

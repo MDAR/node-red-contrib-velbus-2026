@@ -63,7 +63,11 @@ module.exports = function(RED) {
       node.status({ fill: fill || 'blue', shape: shape || 'dot', text: _label + ' ' + text });
     }
 
-    // Internal state: 4 channels, each 0-100%, off by default (power-up state).
+    // Internal state: 4 channels, each 0-100%. Always starts at 0 (off),
+    // never restored from persisted state — confirmed (14/07/2026): real
+    // modules "start safe" at boot, they don't remember their last dim
+    // level across a power cycle. Only memory (below) genuinely persists
+    // on real hardware.
     const _levels = [0, 0, 0, 0];
 
     // Internal memory image — same 1024-byte (0x0000-0x03FF) range and same
@@ -72,7 +76,29 @@ module.exports = function(RED) {
     // memory dump as part of normal module sync, not just on explicit
     // request, and this same memory backs the future Action-assignment
     // engine work). Initialised to 0xFF, matching a factory-fresh module.
-    const _memory = new Uint8Array(1024).fill(0xFF);
+    // This DOES persist — genuinely EEPROM-backed on real hardware.
+    let _memory = new Uint8Array(1024).fill(0xFF);
+
+    // ── Persistence — same design as velbus-emulate-button-io.js, see that
+    // file for the full reasoning. Dirty flag + periodic interval rather
+    // than a context.set() on every write, deliberately, to keep disk
+    // write frequency under explicit control rather than assume anything
+    // about the configured context store's own internal batching.
+    const _context = node.context();
+    let _dirty = false;
+
+    (function restore() {
+      const saved = _context.get('memory');
+      if (Array.isArray(saved) && saved.length === 1024) {
+        _memory = Uint8Array.from(saved);
+      }
+    })();
+
+    const _persistInterval = setInterval(function() {
+      if (!_dirty) return;
+      _context.set('memory', Array.from(_memory));
+      _dirty = false;
+    }, 30000);
 
     function sendMemoryBlock(addr) {
       node.bridge.send(pkt(0xFB, node.address, [
@@ -171,6 +197,7 @@ module.exports = function(RED) {
         const addr = (body[1] << 8) | body[2];
         if (addr > 0x03FF) return;
         _memory[addr] = body[3];
+        _dirty = true;
         return;
       }
 
@@ -182,6 +209,7 @@ module.exports = function(RED) {
         _memory[addr + 1] = body[4];
         _memory[addr + 2] = body[5];
         _memory[addr + 3] = body[6];
+        _dirty = true;
         sendMemoryBlock(addr); // echo back as write confirmation, same as velbus-emulate-button-io
         return;
       }
@@ -241,6 +269,8 @@ module.exports = function(RED) {
     });
 
     node.on('close', function() {
+      clearInterval(_persistInterval);
+      if (_dirty) _context.set('memory', Array.from(_memory));
       node.bridge.deregister(node.address, onPacket);
     });
   }

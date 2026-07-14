@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.11.3, 21 nodes, published on npm.**
+Current state at time of writing: **v0.11.4, 21 nodes, published on npm.**
 
 ---
 
@@ -1403,7 +1403,37 @@ executing the confirmed action-byte tables from 17.5/17.6 — is still not
 built. The prerequisite that used to block it (nowhere to read link
 configuration from) no longer exists.
 
-### 17.8 Noted for later — VMB8IN-20 emulator
+### 17.8 Persistence across Node-RED restarts (v0.11.4)
+
+Both emulators' memory image (not output/level state — see below) survives
+a Node-RED restart via `node.context()`, provided the user's own
+`settings.js` has a persistent context store configured (e.g.
+`contextStorage.default = { module: "localfilesystem" }` — confirmed
+present on Stuart's instance). Two real design corrections worth recording
+precisely, since both were wrong on the first pass:
+
+- **Outputs and dim levels never persist, only memory does.** First
+  attempt persisted output/level state too, reasoning real modules hold
+  state across a power cycle. **Wrong** — real modules "start safe,"
+  outputs off at boot, always. The one genuine exception is newer firmware
+  persisting a *Forced Off* safety state specifically, which doesn't apply
+  here since forced/inhibit states aren't modelled in either emulator at
+  all. Memory persists because it's genuinely EEPROM-backed on real
+  hardware (channel names, link configuration); output/level state isn't.
+- **Writes are batched via a dirty flag plus a 30-second interval, not a
+  `context.set()` call on every single memory write.** First attempt called
+  `context.set()` synchronously after every write, reasoning the
+  `localfilesystem` store's own internal batching (it "flushes to disk
+  every 30 seconds," per Stuart's own `settings.js` comment) made this
+  free. **Flagged as worth not assuming** — a full VelbusLink config sync
+  can mean 256+ writes in quick succession, and controlling actual write
+  frequency explicitly, rather than relying on unverified internal
+  behaviour of a store this project doesn't control, is the safer design.
+  The interval only calls `context.set()` if something actually changed
+  since the last one; a final flush happens on node close so a clean
+  redeploy doesn't lose the last few seconds of writes.
+
+### 17.9 Noted for later — VMB8IN-20 emulator
 
 A `VMB8IN-20` emulator becomes a genuinely useful addition once real
 hardware firmware supports injecting sensor data onto the bus for OLED

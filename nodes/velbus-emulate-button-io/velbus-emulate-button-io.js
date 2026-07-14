@@ -84,8 +84,13 @@ module.exports = function(RED) {
       node.status({ fill: fill || 'blue', shape: shape || 'dot', text: _label + ' ' + text });
     }
 
-    // Internal state: 4 open-collector outputs, off by default (matches a
-    // real module's power-up state — outputs are never on until commanded).
+    // Internal state: 4 open-collector outputs. Always starts at all-off,
+    // never restored from persisted state — confirmed (14/07/2026): real
+    // modules "start safe," outputs off at boot, full stop. The one real
+    // exception is newer firmware persisting a "Forced Off" safety state
+    // specifically — irrelevant here, since this emulator deliberately
+    // doesn't model forced/inhibit states at all (see the scope note at
+    // the top of this file).
     const _outputs = [false, false, false, false];
 
     // Internal memory image — 1024 bytes (0x0000-0x03FF), confirmed range
@@ -105,7 +110,42 @@ module.exports = function(RED) {
     // (0x0128-0x0253) when a link is configured, so a real, working,
     // writable memory image is a shared prerequisite for both fixes, not
     // two separate pieces of work.
-    const _memory = new Uint8Array(1024).fill(0xFF);
+    //
+    // Unlike _outputs, this DOES persist — genuinely EEPROM-backed on real
+    // hardware (channel names, link configuration survive a power cycle).
+    let _memory = new Uint8Array(1024).fill(0xFF);
+
+    // ── Persistence ──────────────────────────────────────────────────────
+    // node.context() rather than flow/global — this state belongs to this
+    // one emulator instance, not shared across other nodes. Relies on the
+    // user's own settings.js having a persistent context store configured
+    // (e.g. contextStorage.default = localfilesystem) — confirmed present
+    // on Stuart's instance. Without one, this silently falls back to
+    // Node-RED's default in-memory context (state lost on restart, same
+    // as before this feature existed — not a regression).
+    //
+    // Deliberately NOT calling context.set() synchronously on every single
+    // memory write (a full VelbusLink config sync could mean 256+ writes
+    // in a row) — a dirty flag plus a periodic interval instead, so the
+    // actual persist call happens at most once per interval regardless of
+    // how many writes occurred in between. This is written to control
+    // write frequency explicitly rather than assume anything about how the
+    // configured context store batches internally.
+    const _context = node.context();
+    let _dirty = false;
+
+    (function restore() {
+      const saved = _context.get('memory');
+      if (Array.isArray(saved) && saved.length === 1024) {
+        _memory = Uint8Array.from(saved);
+      }
+    })();
+
+    const _persistInterval = setInterval(function() {
+      if (!_dirty) return;
+      _context.set('memory', Array.from(_memory));
+      _dirty = false;
+    }, 30000); // matches the localfilesystem store's own flush cadence
 
     function sendMemoryBlock(addr) {
       // 0xCC — 4-byte block starting at addr. Confirmed from protocol:
@@ -206,6 +246,7 @@ module.exports = function(RED) {
         const addr = (body[1] << 8) | body[2];
         if (addr > 0x03FF) return;
         _memory[addr] = body[3];
+        _dirty = true;
         return;
       }
 
@@ -217,6 +258,7 @@ module.exports = function(RED) {
         _memory[addr + 1] = body[4];
         _memory[addr + 2] = body[5];
         _memory[addr + 3] = body[6];
+        _dirty = true;
         // Real modules echo back a memory data block as write confirmation
         // (confirmed: "Write memory block" remark says "Wait for 'memory
         // data block' feedback before sending a next command") — respond
@@ -275,6 +317,8 @@ module.exports = function(RED) {
     });
 
     node.on('close', function() {
+      clearInterval(_persistInterval);
+      if (_dirty) _context.set('memory', Array.from(_memory)); // final flush, don't lose the last few seconds' writes
       node.bridge.deregister(node.address, onPacket);
     });
   }
