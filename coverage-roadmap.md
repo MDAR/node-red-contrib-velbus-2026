@@ -184,3 +184,42 @@ entries, no new nodes required for any of it.
 
 **Logged as a stretch goal in `HANDOVER.md`, not built now:**
 - OLED image writing
+
+---
+
+## 8. Module emulators — `velbus-emulate-button-io` / `velbus-emulate-dimmer`
+(built v0.11.0; Action-assignment engine scoped 14/07/2026, not yet built)
+
+Full technical detail — confirmed real build numbers, exact memory layouts,
+confirmed action-byte tables, and the reasoning behind every scope call
+below — lives in `HANDOVER.md` section 17. This entry is the summary.
+
+**Shipped (v0.11.0):** both emulator nodes exist and work as plain
+initiator/subject devices — button events, output on/off, dimmer level
+set/status, identification, module status. **Known defect, fix parked for
+the next build phase:** both currently use placeholder build numbers
+(`26`/`1`); real, VelbusLink-whitelisted values are now confirmed
+(`VMB4PB`=`2531`, `VMB4DC`=`2446`) and need swapping in — a real
+compatibility risk against genuine VelbusLink until fixed, not cosmetic.
+
+**Action-assignment engine (the "respond to a real VelbusLink-programmed
+link" capability) — scoped, not yet built:**
+- Corrected a genuine terminology mix-up from earlier discussion: "Program
+  Steps out of scope" was meant to exclude Summer/Winter/Holiday *program
+  groups* and full time/date scheduling — not the basic link/action
+  mechanism itself, which is now confirmed in scope.
+- `VMB4PB` (open-collector outputs as subject): all 9 real actions
+  (General + Forced-off family) byte-confirmed via real VLP files.
+- `VMB4DC` (dimmer channels as subject): ~15 actions scoped (General,
+  `0202`/`0214`, both-direction Forced, Inhibit, the dimmer-specific
+  `0408`-family timer) — only 3 byte-confirmed so far (`0103`, `0202`,
+  `0214`); the rest need the same VLP-based confirmation process before
+  building.
+- Confirmed architecturally: action-code bytes are a **separate internal
+  enum per module type**, not a shared Velbus-wide code space — `0103`
+  Toggle is `0x31` on `VMB4PB` but `0x0B` on `VMB4DC`. The engine needs a
+  distinct lookup table per subject module type.
+- Explicitly out of scope, real actions deliberately excluded: remaining
+  Dimming variants (`0201`,`0203`-`0208`,`0213`,`0215`), Slow-on/off
+  (`0301`-`0304`), Disable-timer (`1201`-`1209`), program groups, full
+  time/date scheduling.

@@ -29,6 +29,57 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.11.1 — 14/07/2026
+
+### Documentation only — Action-assignment engine ground truth captured
+
+No code changes. A substantial, hard-won scoping conversation confirmed
+real, concrete technical facts about `VMB4PB`/`VMB4DC` that didn't exist in
+durable form anywhere — captured properly in `HANDOVER.md` section 17 and
+`coverage-roadmap.md` section 8 before being lost to conversation
+compaction, rather than left on recall alone.
+
+- **Corrected a genuine terminology mix-up**: "Program Steps out of scope"
+  (stated when the two emulators were first built) actually meant to
+  exclude Summer/Winter/Holiday "program groups" and full time/date
+  scheduling — not the basic link/action mechanism itself. The basic
+  mechanism (VelbusLink writing "button X does action Y to channel Z" onto
+  a subject module's memory) is now confirmed in scope for a future
+  Action-assignment engine.
+- **Real build numbers confirmed from genuine VelbusLink project files**:
+  `VMB4PB`=`2531` (`BuildYear=0x19/25, BuildWeek=0x1F/31`), `VMB4DC`=`2446`
+  (`BuildYear=0x18/24, BuildWeek=0x2E/46`) — both currently-shipped
+  emulators use placeholder `26`/`1` values instead. A prior session
+  confirmed VelbusLink validates build numbers against a whitelist of real
+  firmware and rejects unrecognised ones — this is a real compatibility
+  defect against genuine VelbusLink, not cosmetic, flagged for the next
+  build phase.
+- **`VMB4PB`'s Linked Push Button memory table fully decoded** from a real
+  VLP file: location (`0x0128`-`0x0253`), 5-byte entry format, and all 9
+  real action byte values it actually offers — confirmed directly from
+  VelbusLink's own filtered action-list UI, which turns out to disagree
+  with the public actions guide (the guide doesn't list `VMB4PB` as an
+  applicable subject for any action at all, despite real working links
+  existing against it — confirmed out of date for this module).
+- **`VMB4DC`'s completely different memory architecture decoded**: a
+  dedicated 256-byte block per channel rather than one shared table, with
+  a 6-byte entry format (one more parameter byte than `VMB4PB`'s 5,
+  matching dimmer actions needing more configuration). 3 of ~15 in-scope
+  action bytes confirmed so far.
+- **Confirmed architecturally significant finding**: action-code bytes are
+  a separate internal enum per module type, not one shared Velbus-wide
+  code space — Toggle (`0103`) is `0x31` on `VMB4PB` but `0x0B` on
+  `VMB4DC`. The eventual engine needs a distinct lookup table per subject
+  module type, not one shared table with type-based filtering.
+- Full final in-scope/out-of-scope action lists recorded for both modules,
+  and the "seen but deliberately excluded" set logged explicitly.
+
+None of this changes shipped behaviour — it's the confirmed ground truth
+the next actual build phase (build-number fix + Action-assignment engine)
+will work from, written down before it could be lost to summarization.
+
+---
+
 ## v0.11.0 — 14/07/2026
 
 ### Module emulators — first two nodes, new "Velbus (emulate)" category

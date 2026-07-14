@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.11.0, 21 nodes, published on npm.**
+Current state at time of writing: **v0.11.1, 21 nodes, published on npm.**
 
 ---
 
@@ -1182,29 +1182,212 @@ initiator side generically) specifically because it reuses the already-
 debugged `0xB8` decode from `velbus-dimmer.js` (section 7.5a) — least new
 code, most direct reuse of already-proven logic.
 
-### 17.3 Program Steps are permanently out of scope for this pattern
+### 17.3 Scope correction (14/07/2026): "Program Steps out of scope" was a terminology
+mix-up — the actual link mechanism is genuinely in scope
 
-This is the single most important scope boundary for this whole emulator
-concept, worth restating plainly: **neither emulator, nor any future one
-built on this same pattern, should ever need to store or execute a Program
-Step.** Real Velbus link behaviours like "toggle" or "dim on long press"
-aren't wire commands — they're memory-based Action configuration written
-by VelbusLink onto whichever module is the *subject* of a link, executed
-by that module's own firmware against raw initiator events crossing the
-bus. An emulator playing the *initiator* role (a button) never needs to
-know or care what Action is programmed against it — that logic lives
-entirely on the real target. An emulator playing the *subject* role (a
-relay, a dimmer) only ever needs to answer plain on/off/set-level commands
-correctly — genuine relay/dimmer richness (timer, forced states, fade
-animation) was deliberately never a design goal for what these tools are
-for, and building real Program Step storage/execution would be close to
-reimplementing actual module firmware — a large, separate undertaking with
-no benefit to that goal. If a future exercise genuinely needs VelbusLink's
-own Action-configuration screen exercised *against* an emulator (rather
-than against a real target), that is a substantially bigger feature and
-needs scoping as its own decision, not a quiet addition to this pattern.
+The original wording of this section (through v0.11.0) said neither emulator
+should ever need to store or execute a Program Step, full stop. That was
+based on a genuine cross-terminology confusion, corrected in conversation
+and worth recording precisely so it isn't reintroduced by accident:
 
-### 17.4 Noted for later — VMB8IN-20 emulator
+- **"Program steps" was being used by Claude to mean the entire memory-based
+  link/action mechanism** — the thing that makes "button X toggles relay Y"
+  work at all when VelbusLink writes that link onto a module.
+- **Stuart understood "program steps" to mean the Summer/Winter/Holiday
+  "program groups" feature** — `0906`-`0912` in the actions guide (select/
+  toggle program 1/2/3, select no program) — a genuinely separate, more
+  advanced multi-schedule-set selection system layered on top of the basic
+  link mechanism.
+
+**Corrected scope, going forward:**
+- **Program *groups*** (the Summer/Winter/Holiday schedule-set selection,
+  actions `09xx`/`10xx`/`11xx` in the guide) and the full time/date/sunrise/
+  sunset Program Step scheduling system remain genuinely out of scope — no
+  change here, these really are a separate, much larger undertaking.
+- **The basic "Linked Push Button" action-assignment mechanism is now
+  confirmed in scope** for `velbus-emulate-dimmer` acting as a link
+  *subject* — real work, not a quiet addition, scoped precisely in
+  sections 17.5-17.7 below.
+- **`velbus-emulate-button-io` needs one small addition beyond pure
+  initiator behaviour**: lock/unlock actions are stored in the *button's
+  own* memory, not the subject's — confirmed from an earlier session that
+  built a working virtual `VMB4RYLD`. The button module itself monitors the
+  bus for the configured initiator and locks/unlocks its own channels. So
+  the button emulator is not purely passive after all, though this is a
+  small, separate piece from the main Action-assignment engine below.
+
+### 17.4 Architecture facts confirmed from an earlier working virtual-module
+session (not this conversation, found via conversation search 14/07/2026)
+
+A prior session built and tested a working virtual `VMB4RYLD` against real
+VelbusLink. Three findings from it materially affect this work and are
+worth treating as established fact, not re-deriving:
+
+- **Action logic lives on the subject module, executed against raw
+  initiator events** — confirmed exactly as reasoned in this conversation.
+  "When VelbusLink links a button to a dimmer/relay, it writes action table
+  entries into the SUBJECT module's memory... When the button broadcasts
+  `0x00`, the subject reads its own action table and acts on itself."
+- **VelbusLink validates build numbers against a whitelist of known real
+  firmware and rejects unrecognised ones outright.** That session needed
+  the exact real build `2436` for a virtual `VMB4RYLD` — an arbitrary
+  placeholder was rejected. This directly affects the currently-shipped
+  emulators (see 17.5/17.6 for the real confirmed values now available).
+- **A real double-toggle bug was found and fixed**: a virtual relay fired
+  twice per press because both the press *and* the release packet were
+  triggering the configured action. Any future action-execution engine
+  must fire only on the semantically correct edge per action type from the
+  start — this is a real, previously-hit failure mode, not a theoretical
+  risk.
+
+### 17.5 `VMB4PB` — confirmed real build number and Linked Push Button table
+
+**Real build number, confirmed directly from a genuine VelbusLink project
+file (`VMB4DC___VMB4PB.vlp`, 14/07/2026): `build="2531"`.** Decoded as
+`BuildYear=0x19` (25 decimal), `BuildWeek=0x1F` (31 decimal) — the human-
+readable build string is literally `"25"+"31"` concatenated, matching the
+same pattern confirmed for `VMB4RYLD`'s `2436` (`BY=24, BW=36`) in the
+prior session referenced above. **The currently-shipped
+`velbus-emulate-button-io.js` defaults to `buildYear: 26, buildWeek: 1` —
+a placeholder, not this confirmed real value. Given the whitelist finding
+above, this should be corrected to `0x19`/`0x1F` in the next build phase.**
+
+**Linked Push Button table location and structure**, confirmed from both
+the protocol document's own memory map and a real decoded VLP file:
+
+```
+Address range: 0x0128 - 0x0253 (60 entries max, 5 bytes each)
+Entry format: [initiator module address, initiator channel bitmask,
+               action byte, parameter 1, parameter 2]
+  - initiator channel bitmask: bit0=ch1, bit1=ch2, bit2=ch3, bit3=ch4
+    (a real bitmask, not a literal channel number — confirmed: button 4
+    appears as byte value 0x08, not 0x04)
+  - parameter 2 doubles as the SUBJECT channel number for this module
+    (0x09=ch9, 0x0A=ch10, 0x0B=ch11, 0x0C=ch12) — necessary here because
+    all 4 outputs share one table, unlike VMB4DC (17.6)
+```
+
+**Confirmed action byte table (all 9 actions VelbusLink actually offers for
+a button→output link on this module — confirmed by direct screenshot of
+VelbusLink's own filtered action list, NOT assumed from the general actions
+guide, which doesn't even list `VMB4PB` in its "applies to" fields at all):**
+
+| Byte | Action | Confirmation method |
+|---|---|---|
+| `0x01` | `0806` Forced off | Sequential pattern + display order, see caveat below |
+| `0x02` | `0807` Forced off while initiator closed | ″ |
+| `0x03` | `0808` Forced off while initiator open | ″ |
+| `0x04` | `0809` Cancel forced off | ″ |
+| `0x05` | `0810` Toggle forced off | ″ |
+| `0x2E` | `0104` Momentary (follow) | Directly confirmed (Stuart stated selection) |
+| `0x2F` | `0102` Off | Directly confirmed |
+| `0x30` | `0101` On | Confirmed by elimination (only remaining General action once the other 3 were independently confirmed) |
+| `0x31` | `0103` Toggle | Directly confirmed |
+
+**Caveat on the Forced-off block (`0x01`-`0x05`):** confirmed by a clean
+sequential-byte-range pattern matching the screenshot's display order, not
+individually confirmed one-by-one the way the General block was. The
+General block's own internal storage order did *not* match its display
+order (`0x2E`=`0104`, 4th in the display list) — so "internal order
+matches display order" is not a safe general assumption, even though it
+produced a clean, internally-consistent answer here. Treat as high
+confidence, not certainty, until/unless one of the middle three
+(`0807`/`0808`) is individually confirmed the same deliberate way `0202`
+and `0214` were for `VMB4DC`.
+
+**Confirmed from real VelbusLink UI: only these 9 actions are offered at
+all for this module's outputs** — no Forced-*on* family, no timers
+(`0405`-family or `0415`), no Inhibit. This is a real, screenshot-confirmed
+fact, superseding the online actions guide, which is confirmed out of date
+for this module (it doesn't list `VMB4PB` as an applicable subject for
+literally any action, despite real, working links existing against it).
+
+### 17.6 `VMB4DC` — confirmed real build number and per-channel memory layout
+
+**Real build number, confirmed the same way: `build="2446"`.** Decoded as
+`BuildYear=0x18` (24), `BuildWeek=0x2E` (46). **`velbus-emulate-dimmer.js`
+currently defaults to the same `26`/`1` placeholder — same correction
+needed in the next build phase.**
+
+**Memory architecture is fundamentally different from `VMB4PB` — confirmed
+directly from a real VLP file, not assumed from naming similarity:**
+`VMB4DC` gives each of its 4 channels its own dedicated 256-byte
+(`0x100`) memory block, rather than one shared table:
+
+```
+Channel 1: 0x000-0x0FF   Channel 2: 0x100-0x1FF
+Channel 3: 0x200-0x2FF   Channel 4: 0x300-0x3FF
+
+Entry format (at the start of each channel's own block):
+  [initiator module address, initiator channel bitmask,
+   action byte, parameter 1, parameter 2, parameter 3]
+```
+
+Two structural consequences worth noting:
+- **No subject-channel byte needed at all** — unlike `VMB4PB`, the subject
+  channel is implicit in *which block* the entry lives in, not encoded
+  within the entry itself.
+- **One extra parameter byte** (3 vs `VMB4PB`'s 2) — dimmer actions
+  routinely need more configuration (duration, dim-up/down duration, dim
+  percentage) than the simple on/off/toggle set. This isn't padding: the
+  actual parameter *counts* used for confirmed actions match the guide's
+  own documented parameter lists exactly — `0103` Toggle (no parameters)
+  uses all-zero parameter bytes, `0202` (one parameter, Duration) uses only
+  the first parameter byte, `0214` Atmospheric dimvalue (three parameters:
+  Duration, dim up/down duration, dim percentage) uses all three, with the
+  third (`0x32` = 50 decimal) landing on a very plausible default 50%.
+- Each channel's own configured name is stored at offset `+0xF0` within its
+  block (confirmed: "Green", "Blue", "Dimmer 4" decoded directly from real
+  channel name data).
+
+**Confirmed action bytes (3 of the ~15 actions currently in scope — see
+17.7):**
+
+| Byte | Action |
+|---|---|
+| `0x0B` | `0103` Toggle |
+| `0x1D` | `0202` Dim at long press, toggle at short press |
+| `0x1F` | `0214` Atmospheric dimvalue |
+
+**Critical finding: these byte values are NOT shared with `VMB4PB`'s
+table.** Toggle (`0103`) is `0x31` on `VMB4PB` but `0x0B` on `VMB4DC` — same
+human-readable action, completely different internal byte, because each
+module type has its own independent, compact internal action-code enum.
+**There is no single universal Velbus action-code space** — the engine
+needs a genuinely separate lookup table per subject module type, keyed by
+that module's own type ID, not one shared table with type-based filtering.
+
+### 17.7 Confirmed final scope for the Action-assignment engine (not yet built)
+
+Confirmed via a full real VelbusLink screenshot of the button→dimmer-
+channel action list (49 actions total, far richer than `VMB4PB`'s 9) —
+final in-scope/out-of-scope split, agreed 14/07/2026:
+
+**In scope, `VMB4PB` open-collector outputs as subject (all 9, all
+byte-confirmed per 17.5):** General (`0101`-`0104`) + Forced-off family
+(`0806`-`0810`). Nothing else — confirmed this module's real action list
+genuinely has no Forced-on, timer, or Inhibit options at all.
+
+**In scope, `VMB4DC` channels as subject (byte-confirmed: `0103`, `0202`,
+`0214` only — the rest below are scoped but not yet individually
+byte-confirmed, a task for the next round of VLP-based verification):**
+- General: `0101`-`0104`
+- Dimming: `0202`, `0214`
+- Forced, both directions this time (unlike `VMB4PB`): `0801`-`0810`
+- Inhibit: `0701`-`0705`
+- Timer, the dimmer-specific family (confirmed distinct from the relay's
+  `0405`/`0415`/`0504`/`0505`, which don't apply to `VMB4DC` at all):
+  `0408`-`0414`
+
+**Explicitly out of scope, "seen, not built"** — real, valid Velbus
+actions, deliberately excluded, logged the same way other out-of-scope
+items are tracked in `coverage-roadmap.md`:
+- The remaining Dimming variants: `0201`, `0203`-`0208`, `0213`, `0215`
+- The Slow-on/off family: `0301`-`0304`
+- The Disable-timer family: `1201`-`1209`
+- Program groups and full time/date scheduling (see 17.3)
+
+### 17.8 Noted for later — VMB8IN-20 emulator
 
 A `VMB8IN-20` emulator becomes a genuinely useful addition once real
 hardware firmware supports injecting sensor data onto the bus for OLED
