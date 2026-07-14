@@ -29,6 +29,66 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.11.0 — 14/07/2026
+
+### Module emulators — first two nodes, new "Velbus (emulate)" category
+
+- **New category, same package** — following discussion, these live inside
+  `node-red-contrib-velbus-2026` under a new "Velbus (emulate)" node-picker
+  category rather than a separate npm package. With only two nodes, a
+  whole separate repo/npm identity wasn't worth the overhead; revisit if
+  the emulator surface grows significantly (see the `VMB8IN-20` idea below).
+- **These are module *emulators*, not controller nodes — the opposite role
+  to every other node in this palette.** Where `velbus-relay`/`velbus-dimmer`
+  etc. receive real modules' status and send them commands, these nodes
+  *receive* commands and *transmit* status/identification, so VelbusLink (or
+  any real linked module) can scan, see, and drive them exactly as it would
+  real hardware — without needing physical devices for training or testing.
+- **`velbus-emulate-button-io`** emulates a `VMB4PB` in "I/O module" mode —
+  4 button inputs (channels 1-4) plus 4 open-collector outputs (channels
+  9-12), confirmed from the actual protocol document to be genuinely
+  simultaneous, not mode-gated at the wire level. VelbusLink's own
+  "pushbutton interface" vs "I/O module" setting, confirmed from its UI, is
+  a labelling/navigation distinction only — this node always answers both
+  kinds of traffic regardless.
+- **`velbus-emulate-dimmer`** emulates a `VMB4DC` — chosen over `VMBDMI`
+  (extra thermal bits this tool has no use for) and `VMB1LED` (a combined
+  button+dimmer role that stops being an advantage once
+  `velbus-emulate-button-io` already covers the initiator side generically
+  for any target). Reuses the `0xB8` status format already implemented and
+  debugged in `velbus-dimmer.js` (see `HANDOVER.md` section 7.5a).
+- **Program Steps are entirely out of scope for both, by explicit design
+  decision, not an oversight.** Real Velbus link behaviours like "toggle"
+  or "dim on long press" aren't wire commands — they're memory-based Action
+  configuration a real module's own firmware executes against raw
+  initiator events. Neither emulator ever needs to store or execute one:
+  as an initiator, the real richness belongs on whatever it's linked to;
+  as a subject, plain on/off is genuinely all that's needed to confirm a
+  link fired, never a stand-in for real relay/dimmer richness (timer,
+  forced-on/off, inhibit, fade animation). Building genuine Program Step
+  storage/execution would be close to reimplementing real module firmware
+  — a large, separate undertaking, out of proportion to what this tool is
+  for.
+- **Help documentation written to explicitly justify the two-module scope**,
+  per request — not just "how to use this," but why these two, and why
+  nothing richer, so the reasoning survives independently of this
+  conversation.
+- **Noted for later, not now:** a `VMB8IN-20` emulator becomes genuinely
+  useful once real hardware firmware supports injecting sensor data onto
+  the bus for OLED displays to consume — flagged as a real future
+  candidate, not scoped or built.
+
+Verified via the mock-RED harness: RTR → identification (confirmed 8 bytes
+for `VMB4PB` including a terminator, 7 bytes for `VMB4DC` with none — not
+assumed to share a shape just because both are original-series), module
+status request answered correctly, output/level commands update internal
+state and broadcast status correctly, all-channels bitmask commands fan out
+to every affected channel, address isolation confirmed (wrong-address
+traffic produces no response), every checksum hand-verified. Not yet
+tested against a real VelbusLink scan/link.
+
+---
+
 ## v0.10.5 — 09/07/2026
 
 ### Fixed the "no examples" Flow Library evaluation flag

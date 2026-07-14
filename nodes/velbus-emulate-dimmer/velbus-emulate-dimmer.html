@@ -1,0 +1,123 @@
+<script type="text/javascript">
+(function() {
+
+  RED.nodes.registerType('velbus-emulate-dimmer', {
+    category:  'Velbus (emulate)',
+    color:     '#C97B4A',
+    defaults: {
+      name:       { value: '' },
+      bridge:     { value: '', type: 'velbus-bridge', required: true },
+      address:    { value: '', required: true, validate: function(v) { const n = parseInt(v, 16); return !isNaN(n) && n >= 1 && n <= 254; } },
+      moduleName: { value: '' },
+      serial:     { value: '0001' },
+      buildYear:  { value: 26 },
+      buildWeek:  { value: 1 },
+    },
+    inputs:  1,
+    outputs: 1,
+    outputLabels: ['level changed'],
+    icon:    'font-awesome/fa-microchip',
+    paletteLabel: 'emulate dimmer',
+
+    label: function() {
+      return this.name || this.moduleName ||
+        ('VMB4DC 0x' + (this.address || '??').toUpperCase());
+    },
+
+    oneditprepare: function() {
+      if (!this.serial || this.serial === '0001') {
+        $('#node-input-serial').val((Math.floor(Math.random() * 0xFFFF)).toString(16).padStart(4, '0').toUpperCase());
+      }
+    }
+  });
+
+})();
+</script>
+
+<script type="text/html" data-template-name="velbus-emulate-dimmer">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-bridge"><i class="fa fa-link"></i> Bridge</label>
+    <input type="text" id="node-input-bridge">
+  </div>
+  <div class="form-row">
+    <label for="node-input-address"><i class="fa fa-hashtag"></i> Address (hex)</label>
+    <input type="text" id="node-input-address" placeholder="e.g. 51" style="width:100px">
+  </div>
+  <div class="form-row">
+    <label for="node-input-moduleName"><i class="fa fa-i-cursor"></i> Module name</label>
+    <input type="text" id="node-input-moduleName" placeholder="Optional — shown in VelbusLink">
+  </div>
+  <div class="form-row">
+    <label for="node-input-serial"><i class="fa fa-barcode"></i> Serial (hex)</label>
+    <input type="text" id="node-input-serial" placeholder="0001" style="width:100px">
+  </div>
+  <div class="form-row">
+    <label for="node-input-buildYear"><i class="fa fa-calendar"></i> Build year</label>
+    <input type="text" id="node-input-buildYear" style="width:60px">
+    <label for="node-input-buildWeek" style="margin-left:12px; width:auto;">Week</label>
+    <input type="text" id="node-input-buildWeek" style="width:60px">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="velbus-emulate-dimmer">
+  <p>
+    <strong>Emulates a real VMB4DC</strong> (4-channel original-series dimmer) — a
+    genuine Velbus bus presence VelbusLink can scan, see, and program links
+    against, without needing physical hardware. Like
+    <code>velbus-emulate-button-io</code>, this plays the opposite role to every
+    controller node in this palette: it <em>receives</em> dimmer commands and
+    <em>transmits</em> status, exactly as the real module would.
+  </p>
+
+  <h3>Why VMB4DC, and why not VMB1LED or VMBDMI — the reasoning</h3>
+  <p>
+    Three original-series dimmers were compared for this role. <code>VMB1LED</code>
+    has a genuine local button built in (combined dimmer+button, one module, two
+    roles) — but once it's understood that <code>velbus-emulate-button-io</code>
+    already covers the initiator/button role generically for <em>any</em> target,
+    dimmer included, that advantage stops mattering: there's no more reason for
+    the dimmer to carry its own local button than there was for a relay.
+    <code>VMBDMI</code> and <code>VMB4DC</code> share the same <code>0xB8</code>
+    status format already implemented and debugged in this palette's own
+    <code>velbus-dimmer.js</code> — but <code>VMBDMI</code> carries extra
+    thermal/error/load-type bits this tool has no use for, while <code>VMB4DC</code>'s
+    own protocol document confirms it has no thermal section at all. Least code,
+    most direct reuse of proven logic: <code>VMB4DC</code>.
+  </p>
+  <p>
+    <strong>What's deliberately not here:</strong> forced-on/off, inhibit, and
+    fade-time animation are all accepted at the protocol level (so a real
+    command referencing them doesn't error) but not genuinely modelled — the
+    emulator jumps straight to a commanded level rather than ramping, and
+    reports plain "normal" run mode always. Program Steps (the memory-based
+    Action system behind real link behaviours like dim-on-long-press) are
+    entirely out of scope, same reasoning as <code>velbus-emulate-button-io</code> —
+    see that node's help for the full explanation.
+  </p>
+
+  <h3>Setup</h3>
+  <ol>
+    <li>Set an address this module doesn't already use on the real bus.</li>
+    <li>Deploy. A bus scan will now find a real-looking VMB4DC at that address.</li>
+    <li>Program a link in VelbusLink against it, or drive it directly from the
+    input below to simulate a "set level" command arriving from elsewhere.</li>
+  </ol>
+
+  <h3>Input — simulate a level change</h3>
+  <pre>
+{ "channel": 1, "percent": 75 }
+  </pre>
+  <p><code>channel</code> is 1-4, <code>percent</code> is 0-100. The change takes
+  effect immediately — this doesn't simulate a fade.</p>
+
+  <h3>Output — reflects real incoming level commands</h3>
+  <pre>
+{ "type": "level", "channel": 2, "percent": 75, "timestamp": 1719100000000 }
+  </pre>
+  <p>Fires per-channel, whenever a real command changes that channel's level —
+  the visible confirmation that a link actually fired.</p>
+</script>

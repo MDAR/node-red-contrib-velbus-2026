@@ -1,0 +1,189 @@
+'use strict';
+
+const { pkt, parsePkt } = require('../../lib/velbus-utils');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// velbus-emulate-dimmer — emulates a VMB4DC (4-channel original-series dimmer).
+//
+// Same role as velbus-emulate-button-io: this is a MODULE EMULATOR, playing
+// the opposite side of the protocol to every controller node in this palette.
+// It RECEIVES dimmer commands and TRANSMITS status, as if it were the real
+// module — so VelbusLink (or any real linked module) can scan, see, and drive
+// it exactly as it would real hardware.
+//
+// Chosen over VMB1LED specifically because it reuses the 0xB8 status format
+// already implemented, debugged, and fixed in this palette's own
+// velbus-dimmer.js (see HANDOVER.md section 7.5a) — VMB4DC is the simpler of
+// the two 0xB8 variants (no thermal/error/load-type bits at all, confirmed
+// from its own protocol document), and needs no local-button role of its own:
+// velbus-emulate-button-io already covers the initiator side generically for
+// any target, dimmer included, so VMB1LED's one advantage (a combined
+// button+dimmer role) stops mattering once that's understood.
+//
+// Program Steps are out of scope here for the same reasoning documented in
+// velbus-emulate-button-io.js — this node only ever needs to answer plain
+// wire commands, never store or execute link configuration.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TYPE_BYTE = 0x12; // VMB4DC, confirmed from protocol_vmb4dc.pdf
+
+module.exports = function(RED) {
+  function VelbusEmulateDimmerNode(config) {
+    RED.nodes.createNode(this, config);
+    const node = this;
+
+    node.bridge = RED.nodes.getNode(config.bridge);
+    node.address = parseInt(config.address, 16) || 0;
+    node.moduleName = config.moduleName || '';
+    node.serial = parseInt(config.serial, 16) || 0x0001;
+    node.buildYear = parseInt(config.buildYear) || 26;
+    node.buildWeek = parseInt(config.buildWeek) || 1;
+
+    if (!node.bridge) {
+      node.status({ fill: 'red', shape: 'ring', text: 'no bridge' });
+      node.error('velbus-emulate-dimmer: no bridge configured');
+      return;
+    }
+    if (!node.address || node.address < 1 || node.address > 254) {
+      node.status({ fill: 'red', shape: 'ring', text: 'invalid address' });
+      node.error('velbus-emulate-dimmer: invalid address ' + node.address);
+      return;
+    }
+
+    const _label = (node.moduleName || 'VMB4DC') +
+      ' (0x' + node.address.toString(16).padStart(2, '0').toUpperCase() + ')';
+
+    function setStatus(text, fill, shape) {
+      node.status({ fill: fill || 'blue', shape: shape || 'dot', text: _label + ' ' + text });
+    }
+
+    // Internal state: 4 channels, each 0-100%, off by default (power-up state).
+    const _levels = [0, 0, 0, 0];
+
+    function sendIdentification() {
+      // 7 bytes — no terminator byte at all, confirmed from the protocol
+      // document. Different from velbus-emulate-button-io's 8-byte VMB4PB
+      // response; don't assume the two share a shape just because they're
+      // both original-series.
+      node.bridge.send(pkt(0xFB, node.address, [
+        0xFF, TYPE_BYTE,
+        (node.serial >> 8) & 0xFF, node.serial & 0xFF,
+        0x00, // memory map version
+        node.buildYear & 0xFF, node.buildWeek & 0xFF,
+      ]));
+    }
+
+    function sendStatus(ch) {
+      // 0xB8 — one packet per channel, matching the real protocol (a status
+      // request targets a single channel bitmask, not "all channels at once").
+      // Status byte: bits 0-1 run mode (00=normal — we never model forced/
+      // inhibit here, matching the "plain on/off, nothing relay-shaped"
+      // scope decision), no thermal/error/load-type bits at all for this type.
+      const chBit = 1 << (ch - 1);
+      const dimValue = _levels[ch - 1];
+      node.bridge.send(pkt(0xFB, node.address, [
+        0xB8, chBit,
+        0x00,       // status byte — always "normal" run mode
+        dimValue,
+        0x00,       // LED status — not modelled
+        0x00, 0x00, 0x00, // 24-bit timer — always 0, no active fade tracked
+      ]));
+    }
+
+    function setLevel(ch, value) {
+      _levels[ch - 1] = Math.max(0, Math.min(100, value));
+      sendStatus(ch);
+      setStatus('ch' + ch + ' ' + _levels[ch - 1] + '%',
+        _levels[ch - 1] > 0 ? 'green' : 'grey');
+      node.send({
+        payload: {
+          type: 'level',
+          channel: ch,
+          percent: _levels[ch - 1],
+          timestamp: Date.now(),
+        }
+      });
+    }
+
+    // ── Packet handler — receives commands as if this were the real module ──
+
+    function onPacket(raw) {
+      const p = parsePkt(raw);
+      if (!p) return;
+      if (p.addr !== node.address) return;
+
+      if (p.rtr) {
+        sendIdentification();
+        return;
+      }
+
+      const { cmd, body } = p;
+
+      if (cmd === 0xFA) { // dimmer channel status request
+        if (body.length < 2) return;
+        const chBit = body[1];
+        for (let i = 0; i < 4; i++) if (chBit & (1 << i)) sendStatus(i + 1);
+        return;
+      }
+
+      if (cmd === 0x07) { // set dim channel value
+        // DLC=5: chBit, dimvalue, fade-time-hi, fade-time-lo. Fade time is
+        // accepted and parsed for protocol completeness but not actually
+        // animated — the emulator jumps straight to the target level rather
+        // than ramping, since nothing here needs to demonstrate fade timing
+        // specifically. If that changes, this is the one place to revisit.
+        if (body.length < 4) return;
+        const chBit = body[1];
+        const value = body[2];
+        for (let i = 0; i < 4; i++) if (chBit & (1 << i)) setLevel(i + 1, value);
+        return;
+      }
+
+      if (cmd === 0x11) { // restore last used dim value
+        if (body.length < 2) return;
+        const chBit = body[1];
+        // "Last used" isn't tracked separately from current level here —
+        // there's nothing to restore to beyond whatever level is already
+        // set, so this just re-confirms the current state. A real module
+        // remembers a genuinely separate "last on" value across being
+        // switched to 0; that distinction isn't needed for this tool.
+        for (let i = 0; i < 4; i++) if (chBit & (1 << i)) sendStatus(i + 1);
+        return;
+      }
+
+      if (cmd === 0x10) { // stop channel dimming
+        if (body.length < 2) return;
+        const chBit = body[1];
+        for (let i = 0; i < 4; i++) if (chBit & (1 << i)) sendStatus(i + 1);
+        return;
+      }
+    }
+
+    node.bridge.register(node.address, onPacket);
+    setStatus('ready', 'grey');
+
+    // ── Input — simulate a level change from Node-RED ───────────────────────
+
+    node.on('input', function(msg) {
+      const inp = (msg && msg.payload && typeof msg.payload === 'object') ? msg.payload : {};
+      const ch = parseInt(inp.channel);
+
+      if (!ch || ch < 1 || ch > 4) {
+        node.warn('velbus-emulate-dimmer: input requires "channel": 1-4');
+        return;
+      }
+      if (typeof inp.percent !== 'number') {
+        node.warn('velbus-emulate-dimmer: input requires "percent": 0-100');
+        return;
+      }
+
+      setLevel(ch, Math.round(inp.percent));
+    });
+
+    node.on('close', function() {
+      node.bridge.deregister(node.address, onPacket);
+    });
+  }
+
+  RED.nodes.registerType('velbus-emulate-dimmer', VelbusEmulateDimmerNode);
+};

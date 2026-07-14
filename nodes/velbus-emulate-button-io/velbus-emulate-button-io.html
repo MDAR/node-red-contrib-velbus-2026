@@ -1,0 +1,156 @@
+<script type="text/javascript">
+(function() {
+
+  RED.nodes.registerType('velbus-emulate-button-io', {
+    category:  'Velbus (emulate)',
+    color:     '#C97B4A',
+    defaults: {
+      name:       { value: '' },
+      bridge:     { value: '', type: 'velbus-bridge', required: true },
+      address:    { value: '', required: true, validate: function(v) { const n = parseInt(v, 16); return !isNaN(n) && n >= 1 && n <= 254; } },
+      moduleName: { value: '' },
+      serial:     { value: '0001' },
+      buildYear:  { value: 26 },
+      buildWeek:  { value: 1 },
+    },
+    inputs:  1,
+    outputs: 1,
+    outputLabels: ['output state'],
+    icon:    'font-awesome/fa-microchip',
+    paletteLabel: 'emulate button+I/O',
+
+    label: function() {
+      return this.name || this.moduleName ||
+        ('VMB4PB 0x' + (this.address || '??').toUpperCase());
+    },
+
+    oneditprepare: function() {
+      // Auto-generate a plausible serial if the field is still at its default
+      if (!this.serial || this.serial === '0001') {
+        $('#node-input-serial').val((Math.floor(Math.random() * 0xFFFF)).toString(16).padStart(4, '0').toUpperCase());
+      }
+    }
+  });
+
+})();
+</script>
+
+<script type="text/html" data-template-name="velbus-emulate-button-io">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-bridge"><i class="fa fa-link"></i> Bridge</label>
+    <input type="text" id="node-input-bridge">
+  </div>
+  <div class="form-row">
+    <label for="node-input-address"><i class="fa fa-hashtag"></i> Address (hex)</label>
+    <input type="text" id="node-input-address" placeholder="e.g. 50" style="width:100px">
+  </div>
+  <div class="form-row">
+    <label for="node-input-moduleName"><i class="fa fa-i-cursor"></i> Module name</label>
+    <input type="text" id="node-input-moduleName" placeholder="Optional — shown in VelbusLink">
+  </div>
+  <div class="form-row">
+    <label for="node-input-serial"><i class="fa fa-barcode"></i> Serial (hex)</label>
+    <input type="text" id="node-input-serial" placeholder="0001" style="width:100px">
+  </div>
+  <div class="form-row">
+    <label for="node-input-buildYear"><i class="fa fa-calendar"></i> Build year</label>
+    <input type="text" id="node-input-buildYear" style="width:60px">
+    <label for="node-input-buildWeek" style="margin-left:12px; width:auto;">Week</label>
+    <input type="text" id="node-input-buildWeek" style="width:60px">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="velbus-emulate-button-io">
+  <p>
+    <strong>Emulates a real VMB4PB module in "I/O module" mode</strong> — a genuine
+    Velbus bus presence that VelbusLink can scan, see, and program links against,
+    without needing physical hardware. This is a module <em>emulator</em>, not a
+    controller node — it plays the opposite role to every other node in this
+    palette: instead of receiving real modules' events and letting you react to
+    them, it <em>transmits</em> button events and <em>receives</em> output
+    commands, exactly as a real VMB4PB would.
+  </p>
+
+  <h3>Why VMB4PB, and why only this — the reasoning</h3>
+  <p>
+    A real VMB4PB, switched into "I/O module" mode in VelbusLink's own Advanced
+    settings tab, exposes 4 button inputs (channels 1-4) <em>and</em> 4
+    open-collector outputs (channels 9-12) simultaneously — confirmed directly
+    from the protocol document, not assumed from the name. That single module
+    covers both roles this kind of training/testing needs: something that can
+    <em>initiate</em> a link (a button), and something that can be the visible
+    <em>result</em> of one firing (an output going on).
+  </p>
+  <p>
+    <strong>What's deliberately not here, and why:</strong> real Velbus link
+    behaviours like "toggle" or "dim on long press" aren't wire commands at
+    all — they're Program Steps, a memory-based Action configuration VelbusLink
+    writes onto whichever module is the <em>subject</em> of the link, executed
+    by that module's own firmware against raw initiator events. This emulator
+    never needs to store or execute one, regardless of which side of a link it
+    plays: as an initiator, the real richness lives on whatever it's linked to;
+    as a subject, its outputs are correctly just plain on/off — never a stand-in
+    for genuine relay behaviour (timer, forced-on/off, inhibit). Building
+    real Program Step storage/execution would be a large undertaking, close to
+    reimplementing real module firmware, for no benefit to what this tool is
+    actually for. If a real relay's specific behaviour needs demonstrating, link
+    against real hardware, or <code>velbus-relay</code>/<code>-20</code>, instead.
+  </p>
+  <p>
+    <strong>"I/O module" vs "pushbutton interface" mode</strong>, as seen in
+    VelbusLink's own configuration UI, is a VelbusLink-side labelling/navigation
+    distinction only — the actual wire commands are identical either way,
+    confirmed directly from the protocol document. This node doesn't model
+    "mode" as a concept at all: it always answers button-input traffic and
+    output commands simultaneously, regardless of what VelbusLink's own UI
+    happens to call it.
+  </p>
+
+  <h3>Setup</h3>
+  <ol>
+    <li>Set an address this module doesn't already use on the real bus.</li>
+    <li>Deploy. VelbusLink's own bus scan (or this palette's <code>velbus-scan</code>)
+    will now find a real-looking VMB4PB at that address.</li>
+    <li>Program a link in VelbusLink exactly as you would against real hardware —
+    e.g. "button 1 → toggle relay X" on a real relay module.</li>
+    <li>Trigger the input below to simulate the button press, and watch the
+    real linked module respond.</li>
+  </ol>
+
+  <h3>Input — simulate a button event</h3>
+  <pre>
+{ "channel": 1, "event": "press" }
+{ "channel": 1, "event": "release" }
+{ "channel": 1, "event": "long" }
+  </pre>
+  <p><code>channel</code> is 1-4. <code>event</code> defaults to <code>"press"</code>
+  if omitted. A normal button press is a <code>press</code> immediately followed
+  by a <code>release</code> — send both, same as a real physical press-and-release,
+  if the link you're testing depends on distinguishing them.</p>
+
+  <h3>Output — reflects real incoming output commands</h3>
+  <p>
+    Fires whenever a real command (from VelbusLink's own link execution, or
+    anything else on the bus) switches one of the 4 emulated outputs on or off —
+    this is the visible confirmation that a link actually fired.
+  </p>
+  <pre>
+{ "type": "output", "outputs": [true, false, false, false], "timestamp": 1719100000000 }
+  </pre>
+  <p><code>outputs</code> is always all 4 channels (9, 10, 11, 12 in that order),
+  regardless of which one changed — check for the specific index you care about.</p>
+
+  <h3>What this node will never need to do</h3>
+  <p>
+    Read or write Program Steps, model locking/inversion/enable-disable state,
+    or represent VelbusLink's "mode" setting — all deliberately out of scope,
+    per the reasoning above. If a future need genuinely requires programming
+    real link configuration <em>onto</em> this emulator (rather than using it as
+    an initiator for real targets), that's a substantially larger feature and
+    would need scoping separately, not a quiet addition here.
+  </p>
+</script>

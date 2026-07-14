@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.10.5, 19 nodes, published on npm.**
+Current state at time of writing: **v0.11.0, 21 nodes, published on npm.**
 
 ---
 
@@ -28,7 +28,8 @@ Current state at time of writing: **v0.10.5, 19 nodes, published on npm.**
 14. [Contribution and release workflow](#14-contribution-and-release-workflow)
 15. [Where to find protocol references](#15-where-to-find-protocol-references)
 16. [Code style rules](#16-code-style-rules)
-17. [License and attribution](#17-license-and-attribution)
+17. [Module emulators — architecture and scope reasoning](#17-module-emulators--architecture-and-scope-reasoning)
+18. [License and attribution](#18-license-and-attribution)
 
 ---
 
@@ -313,6 +314,8 @@ or a string before assuming the parsing logic itself is wrong.
 | `velbus-blind-20` | Velbus (outputs) | VMB2BLE-20 |
 | `velbus-clock` | Velbus (outputs) | **No fixed module address.** Broadcasts system time/date/DST to the bus broadcast address (`0x00`), sets clock alarms and sunrise/sunset enable state either globally (broadcast) or locally (a specific module, via a per-message address override) |
 | `velbus-energy` | Velbus (inputs) | VMBPSUMNGR-20 — power supply manager: PSU load percentages, live wattage/voltage/amperage per rail, a warranty (hours-in-operation) counter, and PSU/warranty alarm status |
+| `velbus-emulate-button-io` | Velbus (emulate) | **Module emulator, not a controller** — emulates a real `VMB4PB` in "I/O module" mode (4 button inputs + 4 open-collector outputs). Receives commands, transmits status/identification — the opposite direction to every other node above. See section 17 for the architecture. |
+| `velbus-emulate-dimmer` | Velbus (emulate) | **Module emulator, not a controller** — emulates a real `VMB4DC`. Same opposite-direction role as `velbus-emulate-button-io`. See section 17. |
 
 Palette group colours: **Velbus (inputs)** is teal (`#3A8C8C`), **Velbus (outputs)** is
 blue (`#4A90D9`).
@@ -1137,7 +1140,80 @@ git push --tags
 
 ---
 
-## 17. License and attribution
+## 17. Module emulators — architecture and scope reasoning
+
+`velbus-emulate-button-io` and `velbus-emulate-dimmer` (v0.11.0) are a
+genuinely different kind of node from everything else in this palette —
+worth understanding clearly before touching either, or before adding a
+third.
+
+### 17.1 Opposite direction, same underlying utilities
+
+Every controller node above (relay, dimmer, sensor, etc.) follows the same
+shape: register for a real module's address, **receive** its status
+broadcasts, **transmit** commands to it. The emulator nodes invert this
+completely: register for an address *this node itself claims to be*,
+**receive** commands as if they were real incoming instructions, and
+**transmit** status/identification as if a real module were reporting them.
+Same `pkt()`/`parsePkt()`/`rtrPkt()` utilities from `lib/velbus-utils.js`
+throughout — no new wire-level plumbing was needed, just the reversed
+direction of who initiates what.
+
+The key mechanism: `parsePkt()` already exposes an `rtr` boolean on every
+parsed packet, and `rtrPkt(addr)` already existed (built for `velbus-scan`'s
+own bus-discovery polling). An emulator just needs to register for its own
+address and, on receiving `p.rtr === true`, respond with a normal `0xFF`
+identification frame — exactly what a real module does when polled. Nothing
+new had to be built for this; it was already sitting in the codebase,
+just never used in this direction before.
+
+### 17.2 Why these two module types
+
+See the CHANGELOG_FORUM.md v0.11.0 entry and each node's own help text for
+the full reasoning — summarised: `VMB4PB` in "I/O module" mode gives 4
+button inputs and 4 open-collector outputs simultaneously (confirmed from
+its protocol document that this isn't mode-gated at the wire level — it's
+a VelbusLink-side UI/navigation distinction only), covering both the
+initiator and subject roles a training/testing exercise needs from one
+module. `VMB4DC` was chosen for the dimmer role over `VMBDMI` (extra
+thermal bits not needed here) and `VMB1LED` (a combined button+dimmer role
+that stops mattering once `velbus-emulate-button-io` already covers the
+initiator side generically) specifically because it reuses the already-
+debugged `0xB8` decode from `velbus-dimmer.js` (section 7.5a) — least new
+code, most direct reuse of already-proven logic.
+
+### 17.3 Program Steps are permanently out of scope for this pattern
+
+This is the single most important scope boundary for this whole emulator
+concept, worth restating plainly: **neither emulator, nor any future one
+built on this same pattern, should ever need to store or execute a Program
+Step.** Real Velbus link behaviours like "toggle" or "dim on long press"
+aren't wire commands — they're memory-based Action configuration written
+by VelbusLink onto whichever module is the *subject* of a link, executed
+by that module's own firmware against raw initiator events crossing the
+bus. An emulator playing the *initiator* role (a button) never needs to
+know or care what Action is programmed against it — that logic lives
+entirely on the real target. An emulator playing the *subject* role (a
+relay, a dimmer) only ever needs to answer plain on/off/set-level commands
+correctly — genuine relay/dimmer richness (timer, forced states, fade
+animation) was deliberately never a design goal for what these tools are
+for, and building real Program Step storage/execution would be close to
+reimplementing actual module firmware — a large, separate undertaking with
+no benefit to that goal. If a future exercise genuinely needs VelbusLink's
+own Action-configuration screen exercised *against* an emulator (rather
+than against a real target), that is a substantially bigger feature and
+needs scoping as its own decision, not a quiet addition to this pattern.
+
+### 17.4 Noted for later — VMB8IN-20 emulator
+
+A `VMB8IN-20` emulator becomes a genuinely useful addition once real
+hardware firmware supports injecting sensor data onto the bus for OLED
+displays to consume. Flagged here as a real, specific future candidate —
+not scoped, not built, revisit if/when that firmware capability lands.
+
+---
+
+## 18. License and attribution
 
 MIT licensed — see `LICENSE`.
 
