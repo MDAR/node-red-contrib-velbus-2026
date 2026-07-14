@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.12.0, 21 nodes, published on npm.**
+Current state at time of writing: **v0.12.1, 21 nodes, published on npm.**
 
 ---
 
@@ -1412,22 +1412,35 @@ details:
 - **`VMB4DC`'s action-table parser** reads across all 4 per-channel memory
   blocks (6-byte entries, subject channel implicit in which block an entry
   lives in — this module has no shared table at all, unlike `VMB4PB`).
-- **Two documented simplifications, not silent gaps**: `VMB4PB`'s
-  Forced-off family is executed as plain Off — this emulator doesn't track
-  a persistent forced-state override that blocks subsequent commands, so
-  genuine "stays off even if commanded on" fidelity isn't modelled.
-  `VMB4DC`'s `0202` long-press dimming is executed as a fixed 20% step per
-  discrete 'long' event, not continuous dimming while held — this
-  emulator's button input model is discrete events, not a continuously-
-  held state, so true ramping isn't meaningful to implement as-is. Both
-  are the place to revisit if genuine fidelity is ever needed, not
-  oversights.
+- **Genuine forced-off and long-press dimming, corrected v0.12.1** — an
+  initial version of this engine (v0.12.0) flattened both to simplified
+  approximations (plain Off; a fixed step per event). Correctly rejected:
+  "Forced off MUST retain that state, ignoring all else until Forced Off
+  is released... what is the point otherwise?" Both are now genuine:
+  - `VMB4PB` tracks real persistent forced-off state per output
+    (`_forcedOff[]`), gated through a single `setOutput()` helper every
+    code path uses — the Action-assignment engine *and* direct `0x01`/
+    `0x02` commands alike — so a forced channel cannot be turned back on
+    by anything except the specific cancel/toggle-forced actions.
+  - `VMB4DC`'s `0202` implements the real gesture: press waits, a
+    long-press starts a genuine `setInterval`-driven continuous ramp
+    (5%/200ms) that stops at a boundary or on release, whichever comes
+    first, and release with no long-press in that gesture triggers Toggle
+    instead. Direction alternates each new long-press gesture (an
+    interpretation of "opposite direction" as relative to the previous
+    ramp, not the current level — flagged as worth confirming if that
+    wasn't the intent).
 - Verified via the mock-RED harness end-to-end for both emulators: a real
   VelbusLink-style write sequence populating a link entry, followed by a
   genuine bus-wide event from an unrelated module address, confirmed to
   execute the correct action against the correct channel, confirmed
-  repeatable (toggle on then off across two presses), and confirmed a
-  non-matching address is correctly ignored.
+  repeatable (toggle on then off across two presses), confirmed a
+  non-matching address is correctly ignored, confirmed a forced-off output
+  correctly rejects a direct "turn on" attempt until cancelled, and
+  confirmed the dimming ramp starts/stops/reverses/auto-stops correctly —
+  the last of these caught a real test-harness bug (a `setInterval` mock
+  that was only active during node construction, silently preventing the
+  ramp's own timer from ever firing) before trusting the result.
 
 ### 17.8 Persistence across Node-RED restarts (v0.11.4)
 

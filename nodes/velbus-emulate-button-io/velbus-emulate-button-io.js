@@ -245,6 +245,34 @@ module.exports = function(RED) {
       return entries;
     }
 
+    // Genuine persistent forced-off state, one per output — corrected
+    // 14/07/2026 after initially flattening this to plain Off, which
+    // missed the entire point of the action: a forced-off channel MUST
+    // stay off, ignoring every other command, until specifically
+    // cancelled. setOutput() is the single gate every code path uses to
+    // change an output — direct 0x01/0x02 commands included — so nothing
+    // can bypass a forced-off channel by accident.
+    const _forcedOff = [false, false, false, false];
+
+    function setOutput(idx, value) {
+      if (_forcedOff[idx] && value) return; // forced off overrides any attempt to turn on
+      _outputs[idx] = value;
+    }
+
+    function broadcastOutputChange(ch) {
+      const idx = ch - 9;
+      sendModuleStatus();
+      setStatus('out' + ch + '=' + (_outputs[idx] ? '1' : '0') + (_forcedOff[idx] ? ' (forced)' : ''), 'green');
+      node.send({
+        payload: {
+          type: 'output',
+          outputs: _outputs.slice(),
+          forced: _forcedOff.slice(),
+          timestamp: Date.now(),
+        }
+      });
+    }
+
     function executeAction(entry, eventBits) {
       const ch = entry.subjectChannel;
       if (ch < 9 || ch > 12) return; // not a valid output channel
@@ -252,46 +280,50 @@ module.exports = function(RED) {
 
       switch (entry.action) {
         case 0x30: // 0101 On — confirmed HANDOVER.md 17.5
-          _outputs[idx] = true;
+          setOutput(idx, true);
           break;
         case 0x2F: // 0102 Off — confirmed
-          _outputs[idx] = false;
+          setOutput(idx, false);
           break;
         case 0x31: // 0103 Toggle — confirmed
-          _outputs[idx] = !_outputs[idx];
+          setOutput(idx, !_outputs[idx]);
           break;
         case 0x2E: // 0104 Momentary (follow) — confirmed. Genuinely tracks
           // press/release directly, not an edge-triggered toggle: on while
           // pressed, off while released.
-          if (eventBits.pressed) _outputs[idx] = true;
-          else if (eventBits.released) _outputs[idx] = false;
+          if (eventBits.pressed) setOutput(idx, true);
+          else if (eventBits.released) setOutput(idx, false);
           else return; // 'long' bit alone isn't meaningful for this action
           break;
-        case 0x01: case 0x02: case 0x03: case 0x04: case 0x05:
-          // 0806-0810, the Forced-off family — confirmed high-confidence
-          // (see HANDOVER.md 17.5 caveat: sequential-pattern confirmed, not
-          // individually verified one-by-one the way General was).
-          // SIMPLIFICATION, flagged clearly: treated as plain Off. A real
-          // "forced" state also blocks subsequent normal commands until
-          // cancelled — not modelled here, since this emulator doesn't
-          // track a persistent forced-state override at all. If real
-          // forced-state fidelity is ever needed, this is the place to
-          // revisit, not a quiet gap.
+        case 0x01: // 0806 Forced off — unconditional, fires on any event
+          _forcedOff[idx] = true;
           _outputs[idx] = false;
+          break;
+        case 0x02: // 0807 Forced off while initiator is closed — forced for
+          // as long as the initiator stays pressed, released when it's let go.
+          if (eventBits.pressed) { _forcedOff[idx] = true; _outputs[idx] = false; }
+          else if (eventBits.released) { _forcedOff[idx] = false; }
+          else return;
+          break;
+        case 0x03: // 0808 Forced off while initiator is open — the reverse
+          // of 0807: forced while NOT pressed, released once pressed.
+          if (eventBits.released) { _forcedOff[idx] = true; _outputs[idx] = false; }
+          else if (eventBits.pressed) { _forcedOff[idx] = false; }
+          else return;
+          break;
+        case 0x04: // 0809 Cancel forced off — unconditional release, output
+          // stays wherever it was (off) until something else commands it.
+          _forcedOff[idx] = false;
+          break;
+        case 0x05: // 0810 Toggle forced off
+          _forcedOff[idx] = !_forcedOff[idx];
+          if (_forcedOff[idx]) _outputs[idx] = false;
           break;
         default:
           return; // unrecognised action byte — ignore rather than guess
       }
 
-      sendModuleStatus();
-      setStatus('linked out' + ch + '=' + (_outputs[idx] ? '1' : '0'), 'green');
-      node.send({
-        payload: {
-          type: 'output',
-          outputs: _outputs.slice(),
-          timestamp: Date.now(),
-        }
-      });
+      broadcastOutputChange(ch);
     }
 
     // ── Packet handler — receives commands as if this were the real module ──
@@ -399,19 +431,20 @@ module.exports = function(RED) {
         const ch = body[1];
         const on = cmd === 0x02;
         if (ch === 255) {
-          for (let i = 0; i < 4; i++) _outputs[i] = on;
+          for (let i = 0; i < 4; i++) setOutput(i, on);
         } else if (ch >= 9 && ch <= 12) {
-          _outputs[ch - 9] = on;
+          setOutput(ch - 9, on);
         } else {
           return;
         }
         sendModuleStatus();
-        setStatus('out: ' + _outputs.map((v, i) => (i + 9) + '=' + (v ? '1' : '0')).join(' '));
+        setStatus('out: ' + _outputs.map((v, i) => (i + 9) + '=' + (v ? '1' : '0') + (_forcedOff[i] ? 'F' : '')).join(' '));
 
         node.send({
           payload: {
             type: 'output',
             outputs: _outputs.slice(),
+            forced: _forcedOff.slice(),
             timestamp: Date.now(),
           }
         });

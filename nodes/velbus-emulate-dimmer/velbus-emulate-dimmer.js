@@ -170,6 +170,35 @@ module.exports = function(RED) {
       });
     }
 
+    // Genuine long-press dimming state — corrected 14/07/2026 after
+    // initially flattening this to a fixed step per event, which missed
+    // the real gesture entirely. Real behaviour: press does nothing yet;
+    // release with no long-press since the press = Toggle; a long-press
+    // starts continuous ramping in the opposite direction from the last
+    // ramp, stopping at full on/off or when release arrives.
+    const _dimGestureLong = [false, false, false, false]; // did this gesture include a long-press
+    const _dimLastDirection = [1, 1, 1, 1]; // alternates each new long-press, so repeated holds don't get stuck dimming one way
+    const _dimRampInterval = [null, null, null, null];
+
+    function stopDimRamp(idx) {
+      if (_dimRampInterval[idx]) {
+        clearInterval(_dimRampInterval[idx]);
+        _dimRampInterval[idx] = null;
+      }
+    }
+
+    function startDimRamp(ch) {
+      const idx = ch - 1;
+      if (_dimRampInterval[idx]) return; // already ramping, a repeated 'long' event while held shouldn't restart it
+      _dimLastDirection[idx] *= -1; // alternate direction from the previous long-press gesture
+      const direction = _dimLastDirection[idx];
+      _dimRampInterval[idx] = setInterval(function() {
+        const next = Math.max(0, Math.min(100, _levels[idx] + (direction * 5)));
+        setLevel(ch, next);
+        if (next === 0 || next === 100) stopDimRamp(idx); // condition A: full on/off reached
+      }, 200);
+    }
+
     // ── Action-assignment engine ─────────────────────────────────────────
     // VMB4DC's memory architecture is confirmed different from
     // velbus-emulate-button-io's VMB4PB: each of the 4 channels gets its
@@ -208,21 +237,27 @@ module.exports = function(RED) {
 
     function executeAction(entry, eventBits) {
       const ch = entry.channel;
+      const idx = ch - 1;
       switch (entry.action) {
         case 0x0B: // 0103 Toggle — confirmed HANDOVER.md 17.6
-          setLevel(ch, _levels[ch - 1] > 0 ? 0 : 100);
+          setLevel(ch, _levels[idx] > 0 ? 0 : 100);
           break;
-        case 0x1D: // 0202 Dim at long press, toggle at short press — confirmed.
-          // Genuine continuous dim-while-held isn't meaningful here (this
-          // emulator's button input is discrete press/release/long events,
-          // not a continuously-held state) — SIMPLIFICATION, flagged: a
-          // 'long' event nudges by one fixed 20% step per event received,
-          // rather than ramping continuously. Short press (plain 'press')
-          // is the genuine Toggle behaviour, matching the guide exactly.
-          if (eventBits.long) {
-            setLevel(ch, Math.min(100, _levels[ch - 1] + 20));
-          } else if (eventBits.pressed) {
-            setLevel(ch, _levels[ch - 1] > 0 ? 0 : 100);
+        case 0x1D: // 0202 Dim at long press, toggle at short press — confirmed,
+          // now genuinely implemented rather than approximated: press waits,
+          // a long-press starts a real continuous ramp (condition B: stops on
+          // release below; condition A: stops at 0/100 inside startDimRamp),
+          // release with no long-press in this gesture toggles instead.
+          if (eventBits.pressed) {
+            _dimGestureLong[idx] = false;
+          } else if (eventBits.long) {
+            _dimGestureLong[idx] = true;
+            startDimRamp(ch);
+          } else if (eventBits.released) {
+            stopDimRamp(idx); // condition B: release stops an active ramp
+            if (!_dimGestureLong[idx]) {
+              setLevel(ch, _levels[idx] > 0 ? 0 : 100); // short press = Toggle
+            }
+            _dimGestureLong[idx] = false;
           }
           break;
         case 0x1F: // 0214 Atmospheric dimvalue — confirmed. param3 is the
@@ -377,6 +412,7 @@ module.exports = function(RED) {
 
     node.on('close', function() {
       clearInterval(_persistInterval);
+      for (let i = 0; i < 4; i++) stopDimRamp(i); // don't leak an active ramp's setInterval
       if (_dirty) _context.set('memory', Array.from(_memory));
       node.bridge.deregister('all', onPacket);
     });

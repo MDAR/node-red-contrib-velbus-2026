@@ -29,6 +29,46 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.12.1 — 14/07/2026
+
+### Both v0.12.0 simplifications replaced with genuine behaviour
+
+- **Reported by Stuart, correctly rejected outright**: flattening
+  Forced-off to plain Off "is absolutely not the way forward... what is
+  the point otherwise?" — and the long-press dimming step approximation
+  wasn't needed at all; the real gesture logic is straightforward.
+- **`velbus-emulate-button-io`: genuine persistent forced-off state.**
+  Added `_forcedOff[]`, one per output, and routed every code path that
+  changes an output — the Action-assignment engine *and* direct `0x01`/
+  `0x02` commands — through a single guarded `setOutput()` so nothing can
+  bypass a forced channel by accident. All 5 Forced actions now do what
+  they actually mean: `0806` forces off unconditionally, `0807`/`0808`
+  force off for as long as the initiator stays closed/open respectively
+  (released when it changes), `0809` cancels unconditionally, `0810`
+  toggles the forced state itself. Verified: a channel turned on directly,
+  then forced off, then a direct "turn on" command correctly has no effect
+  while forced — only cancelling releases it.
+- **`velbus-emulate-dimmer`: genuine continuous long-press ramping.**
+  Implemented exactly as specified: a press does nothing yet; a release
+  with no long-press in that gesture triggers Toggle; a long-press starts
+  a real `setInterval`-driven ramp (5%/200ms) that stops at full on/off or
+  the moment release arrives, whichever comes first. Direction alternates
+  each new long-press gesture (matching typical real Velbus dimmer-button
+  behaviour, so repeated holds don't get stuck dimming one way) — flagged
+  as an interpretation of "opposite direction" worth confirming, since it
+  could instead have meant relative to the current level. Ramp intervals
+  are cleaned up on node close, alongside the existing persist interval.
+- Verified via the mock-RED harness with a properly persistent (not
+  construction-only) `setInterval` mock — an earlier version of this same
+  test suite had a harness bug that silently prevented the ramp's own
+  timer from ever firing, caught and fixed before relying on the results.
+  Confirmed: short press+release toggles, long-press ramps a measurable
+  amount per tick, release mid-ramp stops it without toggling, a second
+  long-press reverses direction, and a ramp reaching a boundary stops
+  itself automatically.
+
+---
+
 ## v0.12.0 — 14/07/2026
 
 ### Action-assignment engine — both emulators now react to real bus events
