@@ -14,24 +14,20 @@ const { pkt, parsePkt } = require('../../lib/velbus-utils');
 // a real VMB4PB — the whole point being to practice or automate against a
 // realistic bus presence without needing physical hardware.
 //
-// Scope, and why it stops here — see HANDOVER.md and coverage-roadmap.md
-// for the full reasoning, summarised:
-//   - Only plain wire commands are implemented (0x00 events, 0x01/0x02
-//     output on/off, 0xFF identification, 0xED status). Program Steps
-//     (the memory-based Action system VelbusLink writes to a REAL target
-//     module to interpret things like "toggle" or "dim on long press")
-//     are deliberately NOT implemented here. This module only ever needs
-//     to be a valid initiator or a plain on/off subject — whatever rich
-//     behaviour a link should have belongs on whichever module the link
-//     is actually programmed onto, real or otherwise. Storing and
-//     executing Program Steps here would be a large, separate undertaking
-//     (comparable to real module firmware) for no benefit to that goal.
-//   - The 4 open-collector outputs are the simplest possible way to get a
-//     visible, scannable confirmation that a link fired — they were never
-//     meant to demonstrate relay-specific behaviour (timer, forced-on/off,
-//     inhibit). If a genuine relay exercise is needed, link against a real
-//     relay or velbus-relay/-20 instead; this node's outputs are correctly
-//     just on/off.
+// Scope — see HANDOVER.md section 17 for the full reasoning, summarised:
+//   - Corrected 14/07/2026: "Program Steps out of scope" (the original
+//     wording here) was a terminology mix-up. Program *groups*
+//     (Summer/Winter/Holiday schedule-set selection) and full time/date
+//     scheduling remain out of scope. The basic Linked Push Button
+//     action-assignment mechanism — VelbusLink writing "button X does
+//     action Y to channel Z" into this module's memory — IS in scope and
+//     IS implemented below (see the Action-assignment engine section).
+//   - The confirmed real action set for this module's outputs is narrow:
+//     General (On/Off/Toggle/Momentary-follow) plus the Forced-off family
+//     only — confirmed directly from VelbusLink's own filtered action-list
+//     UI, not the (confirmed out of date for this module) public actions
+//     guide. No Forced-on, no timers, no Inhibit exist for this module at
+//     all, so none are implemented.
 //   - "I/O module" vs "pushbutton interface" mode, as seen in VelbusLink's
 //     own configuration UI, is a VelbusLink-side labelling/navigation
 //     distinction only — confirmed from the actual protocol document that
@@ -222,13 +218,115 @@ module.exports = function(RED) {
       node.bridge.send(pkt(0xF8, node.address, [0x00, pressed, released, long]));
     }
 
+    // ── Action-assignment engine ─────────────────────────────────────────
+    // Reads the Linked Push Button table VelbusLink writes into this
+    // module's own memory (confirmed location: 0x0128-0x0253, 5 bytes per
+    // entry — initiator module address, initiator channel bitmask, action
+    // byte, parameter 1, parameter 2 [=subject output channel 9-12, since
+    // all 4 outputs share this one table]). See HANDOVER.md section 17.5
+    // for how each action byte was confirmed against real VLP files.
+    //
+    // Scans every slot rather than stopping at the first 0xFF — an entry
+    // could be cleared/rewritten out of order, leaving an empty slot
+    // followed by a valid one. 25 slots is cheap to scan in full regardless.
+    function getActionEntries() {
+      const entries = [];
+      for (let base = 0x0128; base + 5 <= 0x0253; base += 5) {
+        const initiatorAddr = _memory[base];
+        if (initiatorAddr === 0xFF) continue; // empty slot
+        entries.push({
+          initiatorAddr,
+          initiatorBit: _memory[base + 1],
+          action: _memory[base + 2],
+          param1: _memory[base + 3],
+          subjectChannel: _memory[base + 4],
+        });
+      }
+      return entries;
+    }
+
+    function executeAction(entry, eventBits) {
+      const ch = entry.subjectChannel;
+      if (ch < 9 || ch > 12) return; // not a valid output channel
+      const idx = ch - 9;
+
+      switch (entry.action) {
+        case 0x30: // 0101 On — confirmed HANDOVER.md 17.5
+          _outputs[idx] = true;
+          break;
+        case 0x2F: // 0102 Off — confirmed
+          _outputs[idx] = false;
+          break;
+        case 0x31: // 0103 Toggle — confirmed
+          _outputs[idx] = !_outputs[idx];
+          break;
+        case 0x2E: // 0104 Momentary (follow) — confirmed. Genuinely tracks
+          // press/release directly, not an edge-triggered toggle: on while
+          // pressed, off while released.
+          if (eventBits.pressed) _outputs[idx] = true;
+          else if (eventBits.released) _outputs[idx] = false;
+          else return; // 'long' bit alone isn't meaningful for this action
+          break;
+        case 0x01: case 0x02: case 0x03: case 0x04: case 0x05:
+          // 0806-0810, the Forced-off family — confirmed high-confidence
+          // (see HANDOVER.md 17.5 caveat: sequential-pattern confirmed, not
+          // individually verified one-by-one the way General was).
+          // SIMPLIFICATION, flagged clearly: treated as plain Off. A real
+          // "forced" state also blocks subsequent normal commands until
+          // cancelled — not modelled here, since this emulator doesn't
+          // track a persistent forced-state override at all. If real
+          // forced-state fidelity is ever needed, this is the place to
+          // revisit, not a quiet gap.
+          _outputs[idx] = false;
+          break;
+        default:
+          return; // unrecognised action byte — ignore rather than guess
+      }
+
+      sendModuleStatus();
+      setStatus('linked out' + ch + '=' + (_outputs[idx] ? '1' : '0'), 'green');
+      node.send({
+        payload: {
+          type: 'output',
+          outputs: _outputs.slice(),
+          timestamp: Date.now(),
+        }
+      });
+    }
+
     // ── Packet handler — receives commands as if this were the real module ──
+    // Registered for 'all' addresses (not just node.address) — necessary
+    // for the Action-assignment engine below, which needs to see OTHER
+    // modules' button events to check them against the Linked Push Button
+    // table. Own-address commands and bus-wide initiator watching are
+    // handled as two separate branches specifically to avoid the bridge's
+    // address-specific AND all-address delivery both firing for this
+    // node's own traffic if it were registered both ways.
 
     function onPacket(raw) {
       const p = parsePkt(raw);
       if (!p) return;
-      if (p.addr !== node.address) return;
 
+      if (p.addr === node.address) {
+        onOwnAddressPacket(p);
+        return;
+      }
+
+      // Not addressed to this module — only relevant if it's a button
+      // event that might match a stored Linked Push Button entry.
+      if (p.rtr || p.cmd !== 0x00 || p.body.length < 4) return;
+      const pressed = p.body[1], released = p.body[2], long = p.body[3];
+      if (pressed === 0 && released === 0 && long === 0) return;
+
+      const entries = getActionEntries();
+      for (const entry of entries) {
+        if (entry.initiatorAddr !== p.addr) continue;
+        if (!(entry.initiatorBit & (pressed | released | long))) continue;
+        executeAction(entry, { pressed: entry.initiatorBit & pressed, released: entry.initiatorBit & released, long: entry.initiatorBit & long });
+      }
+    }
+
+    function onOwnAddressPacket(p) {
       if (p.rtr) {
         sendIdentification();
         return;
@@ -321,7 +419,7 @@ module.exports = function(RED) {
       }
     }
 
-    node.bridge.register(node.address, onPacket);
+    node.bridge.register('all', onPacket);
     setStatus('ready', 'grey');
 
     // ── Input — simulate button presses from Node-RED ──────────────────────
@@ -348,7 +446,7 @@ module.exports = function(RED) {
     node.on('close', function() {
       clearInterval(_persistInterval);
       if (_dirty) _context.set('memory', Array.from(_memory)); // final flush, don't lose the last few seconds' writes
-      node.bridge.deregister(node.address, onPacket);
+      node.bridge.deregister('all', onPacket);
     });
   }
 

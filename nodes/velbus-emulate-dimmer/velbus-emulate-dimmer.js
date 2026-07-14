@@ -20,9 +20,12 @@ const { pkt, parsePkt } = require('../../lib/velbus-utils');
 // any target, dimmer included, so VMB1LED's one advantage (a combined
 // button+dimmer role) stops mattering once that's understood.
 //
-// Program Steps are out of scope here for the same reasoning documented in
-// velbus-emulate-button-io.js — this node only ever needs to answer plain
-// wire commands, never store or execute link configuration.
+// Program *groups* (Summer/Winter/Holiday schedule-set selection) and full
+// time/date scheduling are out of scope — corrected terminology, see
+// HANDOVER.md section 17.3. The basic Linked Push Button action-assignment
+// mechanism IS in scope and IS implemented below (see the Action-assignment
+// engine section) — VelbusLink writing "button X does action Y to my
+// channel Z" into this module's own memory.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TYPE_BYTE = 0x12; // VMB4DC, confirmed from protocol_vmb4dc.pdf
@@ -167,13 +170,99 @@ module.exports = function(RED) {
       });
     }
 
+    // ── Action-assignment engine ─────────────────────────────────────────
+    // VMB4DC's memory architecture is confirmed different from
+    // velbus-emulate-button-io's VMB4PB: each of the 4 channels gets its
+    // own dedicated 256-byte block (0x000/0x100/0x200/0x300), rather than
+    // one shared table — so the subject channel is implicit in which block
+    // an entry lives in, not stored as a parameter byte. Entries are 6
+    // bytes (one more than VMB4PB's 5): initiator module address,
+    // initiator channel bitmask, action byte, parameter 1, 2, 3. See
+    // HANDOVER.md section 17.6 for how each confirmed action byte was
+    // decoded from a real VLP file.
+    //
+    // Entry cap of 37 per channel keeps this safely clear of the channel
+    // name data confirmed living at offset +0xF0 within each block (own
+    // channel's name, decoded directly from a real VLP file).
+    function getActionEntries() {
+      const entries = [];
+      for (let ch = 1; ch <= 4; ch++) {
+        const bankBase = (ch - 1) * 0x100;
+        for (let i = 0; i < 37; i++) {
+          const base = bankBase + (i * 6);
+          const initiatorAddr = _memory[base];
+          if (initiatorAddr === 0xFF) continue;
+          entries.push({
+            channel: ch,
+            initiatorAddr,
+            initiatorBit: _memory[base + 1],
+            action: _memory[base + 2],
+            param1: _memory[base + 3],
+            param2: _memory[base + 4],
+            param3: _memory[base + 5],
+          });
+        }
+      }
+      return entries;
+    }
+
+    function executeAction(entry, eventBits) {
+      const ch = entry.channel;
+      switch (entry.action) {
+        case 0x0B: // 0103 Toggle — confirmed HANDOVER.md 17.6
+          setLevel(ch, _levels[ch - 1] > 0 ? 0 : 100);
+          break;
+        case 0x1D: // 0202 Dim at long press, toggle at short press — confirmed.
+          // Genuine continuous dim-while-held isn't meaningful here (this
+          // emulator's button input is discrete press/release/long events,
+          // not a continuously-held state) — SIMPLIFICATION, flagged: a
+          // 'long' event nudges by one fixed 20% step per event received,
+          // rather than ramping continuously. Short press (plain 'press')
+          // is the genuine Toggle behaviour, matching the guide exactly.
+          if (eventBits.long) {
+            setLevel(ch, Math.min(100, _levels[ch - 1] + 20));
+          } else if (eventBits.pressed) {
+            setLevel(ch, _levels[ch - 1] > 0 ? 0 : 100);
+          }
+          break;
+        case 0x1F: // 0214 Atmospheric dimvalue — confirmed. param3 is the
+          // stored dim percentage (confirmed from a real VLP file: a
+          // stored value of 0x32/50 decoded correctly as a 50% default).
+          setLevel(ch, entry.param3);
+          break;
+        default:
+          return; // not yet byte-confirmed (see HANDOVER.md 17.6/17.7) — ignore rather than guess
+      }
+    }
+
     // ── Packet handler — receives commands as if this were the real module ──
+    // Registered for 'all' addresses, not just node.address — necessary for
+    // the Action-assignment engine above, which needs to see OTHER modules'
+    // button events. Own-address commands and bus-wide watching are two
+    // separate branches, same reasoning as velbus-emulate-button-io.js.
 
     function onPacket(raw) {
       const p = parsePkt(raw);
       if (!p) return;
-      if (p.addr !== node.address) return;
 
+      if (p.addr === node.address) {
+        onOwnAddressPacket(p);
+        return;
+      }
+
+      if (p.rtr || p.cmd !== 0x00 || p.body.length < 4) return;
+      const pressed = p.body[1], released = p.body[2], long = p.body[3];
+      if (pressed === 0 && released === 0 && long === 0) return;
+
+      const entries = getActionEntries();
+      for (const entry of entries) {
+        if (entry.initiatorAddr !== p.addr) continue;
+        if (!(entry.initiatorBit & (pressed | released | long))) continue;
+        executeAction(entry, { pressed: entry.initiatorBit & pressed, released: entry.initiatorBit & released, long: entry.initiatorBit & long });
+      }
+    }
+
+    function onOwnAddressPacket(p) {
       if (p.rtr) {
         sendIdentification();
         return;
@@ -265,7 +354,7 @@ module.exports = function(RED) {
       }
     }
 
-    node.bridge.register(node.address, onPacket);
+    node.bridge.register('all', onPacket);
     setStatus('ready', 'grey');
 
     // ── Input — simulate a level change from Node-RED ───────────────────────
@@ -289,7 +378,7 @@ module.exports = function(RED) {
     node.on('close', function() {
       clearInterval(_persistInterval);
       if (_dirty) _context.set('memory', Array.from(_memory));
-      node.bridge.deregister(node.address, onPacket);
+      node.bridge.deregister('all', onPacket);
     });
   }
 

@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.11.5, 21 nodes, published on npm.**
+Current state at time of writing: **v0.12.0, 21 nodes, published on npm.**
 
 ---
 
@@ -1362,7 +1362,7 @@ module type has its own independent, compact internal action-code enum.
 needs a genuinely separate lookup table per subject module type, keyed by
 that module's own type ID, not one shared table with type-based filtering.
 
-### 17.7 Confirmed final scope for the Action-assignment engine (not yet built)
+### 17.7 Confirmed final scope for the Action-assignment engine — built v0.12.0
 
 Confirmed via a full real VelbusLink screenshot of the button→dimmer-
 channel action list (49 actions total, far richer than `VMB4PB`'s 9) —
@@ -1392,16 +1392,42 @@ items are tracked in `coverage-roadmap.md`:
 - The Disable-timer family: `1201`-`1209`
 - Program groups and full time/date scheduling (see 17.3)
 
-**Foundation now built (v0.11.3), engine itself still not built:** both
-emulators now maintain a real, persistent 1024-byte memory image and
-correctly answer `0xCB`/`0xC9`/`0xFC`/`0xCA` (dump/read/write) — added to
-fix a real reported bug (VelbusLink's memory dump going unanswered
-entirely), but this is the exact storage layer the Action-assignment
-engine needs to read configured Linked Push Button entries from. The
-engine itself — watching bus traffic, matching against stored entries,
-executing the confirmed action-byte tables from 17.5/17.6 — is still not
-built. The prerequisite that used to block it (nowhere to read link
-configuration from) no longer exists.
+**Built (v0.12.0):** both emulators now genuinely react to real bus events
+per the links VelbusLink writes into their memory — not just store and
+answer read/write requests (that was v0.11.3's foundation). Implementation
+details:
+
+- **Bridge registration changed from the module's own address to `'all'`.**
+  Both emulators previously only ever saw packets addressed to themselves
+  — structurally impossible to ever observe another module's button event.
+  The bridge (`velbus-bridge.js`) already supported an `'all'`-address
+  listener mode; own-address commands and bus-wide initiator watching are
+  now two separate branches inside each emulator's packet handler
+  (`onOwnAddressPacket` vs. the bus-wide branch in `onPacket`), specifically
+  to avoid the bridge's address-specific and all-address delivery both
+  firing for the node's own traffic.
+- **`VMB4PB`'s action-table parser** reads its single shared Linked Push
+  Button table directly (5-byte entries, subject channel stored as a
+  parameter byte, since all 4 outputs share one table).
+- **`VMB4DC`'s action-table parser** reads across all 4 per-channel memory
+  blocks (6-byte entries, subject channel implicit in which block an entry
+  lives in — this module has no shared table at all, unlike `VMB4PB`).
+- **Two documented simplifications, not silent gaps**: `VMB4PB`'s
+  Forced-off family is executed as plain Off — this emulator doesn't track
+  a persistent forced-state override that blocks subsequent commands, so
+  genuine "stays off even if commanded on" fidelity isn't modelled.
+  `VMB4DC`'s `0202` long-press dimming is executed as a fixed 20% step per
+  discrete 'long' event, not continuous dimming while held — this
+  emulator's button input model is discrete events, not a continuously-
+  held state, so true ramping isn't meaningful to implement as-is. Both
+  are the place to revisit if genuine fidelity is ever needed, not
+  oversights.
+- Verified via the mock-RED harness end-to-end for both emulators: a real
+  VelbusLink-style write sequence populating a link entry, followed by a
+  genuine bus-wide event from an unrelated module address, confirmed to
+  execute the correct action against the correct channel, confirmed
+  repeatable (toggle on then off across two presses), and confirmed a
+  non-matching address is correctly ignored.
 
 ### 17.8 Persistence across Node-RED restarts (v0.11.4)
 

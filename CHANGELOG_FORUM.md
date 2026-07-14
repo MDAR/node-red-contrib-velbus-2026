@@ -29,6 +29,59 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.12.0 — 14/07/2026
+
+### Action-assignment engine — both emulators now react to real bus events
+
+- **The actual missing piece**: after v0.11.5 confirmed VelbusLink could
+  read and write memory correctly, testing showed the emulators still
+  didn't *react* to bus events per the links VelbusLink writes into that
+  memory. Pointed at a working prior virtual-module implementation
+  (`velbus_vmb4ryld_flow.json`, a separate earlier Node-RED-based Velbus
+  emulator project) as reference — the full mechanism (bus-wide listening,
+  action-table parsing, match-and-execute) already existed there and was
+  adapted here, not re-invented from scratch.
+- **Bridge registration changed from address-specific to `'all'`** — both
+  emulators previously only ever saw packets addressed to themselves,
+  which structurally prevented ever seeing another module's button event.
+  The bridge already supported an `'all'`-address listener mode; own-
+  address commands and bus-wide initiator watching are now two separate
+  branches in the packet handler, avoiding double-processing of the
+  node's own traffic.
+- **`velbus-emulate-button-io` (`VMB4PB`)**: parses its confirmed Linked
+  Push Button table (`0x0128`-`0x0253`, one shared table, subject channel
+  stored as a parameter byte) and executes all 9 confirmed real actions —
+  General (On/Off/Toggle/Momentary-follow) and the Forced-off family.
+  Forced-off is a documented simplification: treated as plain Off, since
+  this emulator doesn't track a persistent forced-state override that
+  blocks subsequent commands — flagged clearly as a place to revisit if
+  genuine forced-state fidelity is ever needed, not a silent gap.
+- **`velbus-emulate-dimmer` (`VMB4DC`)**: parses its confirmed per-channel
+  memory blocks (subject channel implicit in which 256-byte block an entry
+  lives in, 6-byte entries) and executes the 3 currently byte-confirmed
+  actions — Toggle, `0202` (Dim at long press/toggle at short press — long
+  press is a documented simplification, a fixed 20% step per event rather
+  than continuous dimming, since this emulator's button input is discrete
+  events, not a continuously-held state), and `0214` Atmospheric dimvalue
+  (confirmed reading its stored percentage from the correct parameter
+  byte). The remaining scoped-but-not-yet-byte-confirmed actions (Forced
+  both directions, Inhibit, the `0408` timer family) are recognised as
+  gaps, not silently guessed at — unrecognised action bytes are ignored
+  rather than assumed.
+- Corrected stale top-of-file scope comments in both emulators, left over
+  from before the "Program Steps out of scope" terminology was corrected
+  in `HANDOVER.md` section 17.3 — they still said the opposite of what's
+  now actually implemented.
+- Verified via the mock-RED harness end-to-end: a real VelbusLink-style
+  write sequence (`0xCA`/`0xFC` writing a link entry into memory) followed
+  by a genuine bus-wide button event from an unrelated module address,
+  confirmed to correctly toggle the right output/dimmer channel, confirmed
+  a second press toggles back, and confirmed an event from a non-matching
+  address is correctly ignored — for both emulators, checked against raw
+  packet contents throughout, not just that the code runs.
+
+---
+
 ## v0.11.5 — 14/07/2026
 
 ### Fixed: VelbusLink stalling when writing memory back to either emulator
