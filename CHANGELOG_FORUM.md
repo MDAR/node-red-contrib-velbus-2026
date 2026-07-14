@@ -29,6 +29,42 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.11.3 — 14/07/2026
+
+### Fixed: both emulators didn't respond to VelbusLink's memory dump at all
+
+- **Reported by Stuart**: "VelbusLink is sending a Memory Dump request
+  `0xCB` to the Emulated Node and it just isn't responding." Confirmed
+  directly against the protocol documents: neither emulator had *any*
+  internal memory representation at all — only `velbus-emulate-button-io`
+  tracked its 4 output states, `velbus-emulate-dimmer` its 4 channel
+  levels. VelbusLink performs a memory dump as part of its normal
+  module-sync process, not only when a user explicitly requests one — with
+  nothing to answer from, the request simply went unanswered.
+- **Added a real, persistent 1024-byte memory image** (`0x0000`-`0x03FF`,
+  confirmed range from both protocol documents) to both emulators,
+  initialised to `0xFF` throughout — matching what every real VLP file
+  examined shows for unconfigured memory, not `0x00`.
+- **Implemented the full memory command set, confirmed identical across
+  both modules**: `0xCB` (dump — answered as a burst of 256 `0xCC` 4-byte
+  blocks covering the entire range, since the request itself carries no
+  address parameter), `0xC9` (read one block on request), `0xFC` (write
+  one byte), `0xCA` (write one 4-byte block, echoed back as a confirmation
+  block — confirmed from the protocol document's own remark that real
+  modules do this before accepting a next command).
+- **This directly supports the already-scoped Action-assignment engine
+  work too, not a separate concern**: VelbusLink writes Linked Push Button
+  entries into this exact memory range (`0x0128`-`0x0253` for `VMB4PB`,
+  confirmed in `HANDOVER.md` section 17.5) when a link is configured. A
+  real, writable memory image was a shared prerequisite for both this bug
+  fix and that future work, not two unrelated pieces.
+- Verified via the mock-RED harness: a full 256-block dump, write-then-read
+  consistency for both single-byte and block writes, and confirmed a full
+  dump correctly reflects prior writes rather than showing stale/default
+  data — checked directly against raw packet contents throughout.
+
+---
+
 ## v0.11.2 — 14/07/2026
 
 ### Fixed a real bug in both emulators: wrong firmware build bytes transmitted

@@ -66,6 +66,27 @@ module.exports = function(RED) {
     // Internal state: 4 channels, each 0-100%, off by default (power-up state).
     const _levels = [0, 0, 0, 0];
 
+    // Internal memory image — same 1024-byte (0x0000-0x03FF) range and same
+    // dump/read/write commands confirmed identical to velbus-emulate-button-io
+    // (see that file's comment for the full reasoning: VelbusLink performs a
+    // memory dump as part of normal module sync, not just on explicit
+    // request, and this same memory backs the future Action-assignment
+    // engine work). Initialised to 0xFF, matching a factory-fresh module.
+    const _memory = new Uint8Array(1024).fill(0xFF);
+
+    function sendMemoryBlock(addr) {
+      node.bridge.send(pkt(0xFB, node.address, [
+        0xCC, (addr >> 8) & 0xFF, addr & 0xFF,
+        _memory[addr], _memory[addr + 1], _memory[addr + 2], _memory[addr + 3],
+      ]));
+    }
+
+    function sendMemoryDump() {
+      for (let addr = 0; addr < 1024; addr += 4) {
+        sendMemoryBlock(addr);
+      }
+    }
+
     function sendIdentification() {
       // 7 bytes — no terminator byte at all, confirmed from the protocol
       // document. Different from velbus-emulate-button-io's 8-byte VMB4PB
@@ -129,6 +150,39 @@ module.exports = function(RED) {
         if (body.length < 2) return;
         const chBit = body[1];
         for (let i = 0; i < 4; i++) if (chBit & (1 << i)) sendStatus(i + 1);
+        return;
+      }
+
+      if (cmd === 0xCB) { // memory dump request
+        sendMemoryDump();
+        return;
+      }
+
+      if (cmd === 0xC9) { // read data block from memory
+        if (body.length < 3) return;
+        const addr = (body[1] << 8) | body[2];
+        if (addr > 0x03FC) return;
+        sendMemoryBlock(addr);
+        return;
+      }
+
+      if (cmd === 0xFC) { // write single byte to memory
+        if (body.length < 4) return;
+        const addr = (body[1] << 8) | body[2];
+        if (addr > 0x03FF) return;
+        _memory[addr] = body[3];
+        return;
+      }
+
+      if (cmd === 0xCA) { // write 4-byte memory block
+        if (body.length < 7) return;
+        const addr = (body[1] << 8) | body[2];
+        if (addr > 0x03FC) return;
+        _memory[addr] = body[3];
+        _memory[addr + 1] = body[4];
+        _memory[addr + 2] = body[5];
+        _memory[addr + 3] = body[6];
+        sendMemoryBlock(addr); // echo back as write confirmation, same as velbus-emulate-button-io
         return;
       }
 

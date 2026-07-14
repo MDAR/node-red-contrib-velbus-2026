@@ -88,6 +88,50 @@ module.exports = function(RED) {
     // real module's power-up state — outputs are never on until commanded).
     const _outputs = [false, false, false, false];
 
+    // Internal memory image — 1024 bytes (0x0000-0x03FF), confirmed range
+    // from the protocol document and matching every real VLP file examined.
+    // Initialised to 0xFF throughout, matching a genuinely factory-fresh
+    // module's memory before any configuration — real VLP dumps show
+    // unconfigured regions as 0xFF, never 0x00.
+    //
+    // This exists specifically because VelbusLink performs a memory dump
+    // (0xCB) as part of its normal module-sync process — not just when the
+    // user explicitly requests one. Without a real memory image to answer
+    // from, this request went unanswered entirely (reported 14/07/2026:
+    // "VelbusLink is sending a Memory Dump request 0xCB to the Emulated
+    // Node and it just isn't responding"). This also directly supports the
+    // Action-assignment engine work scoped in HANDOVER.md section 17 —
+    // VelbusLink writes Linked Push Button entries into this exact memory
+    // (0x0128-0x0253) when a link is configured, so a real, working,
+    // writable memory image is a shared prerequisite for both fixes, not
+    // two separate pieces of work.
+    const _memory = new Uint8Array(1024).fill(0xFF);
+
+    function sendMemoryBlock(addr) {
+      // 0xCC — 4-byte block starting at addr. Confirmed from protocol:
+      // DLC=7, [0xCC, addrHi, addrLo, d0, d1, d2, d3].
+      node.bridge.send(pkt(0xFB, node.address, [
+        0xCC, (addr >> 8) & 0xFF, addr & 0xFF,
+        _memory[addr], _memory[addr + 1], _memory[addr + 2], _memory[addr + 3],
+      ]));
+    }
+
+    function sendMemoryDump() {
+      // 0xCB triggers a dump of the ENTIRE memory range as a sequence of
+      // 0xCC blocks — confirmed from the protocol document (the request
+      // itself carries no address parameter, DLC=1, so the response must
+      // cover everything unprompted). 256 blocks total (1024 bytes / 4).
+      // Sent as a synchronous burst — Node's TCP socket buffers these
+      // correctly and the bridge's own splitPackets() already handles
+      // multiple frames arriving close together, so no explicit throttling
+      // has been needed for any other multi-packet response in this
+      // codebase. Worth revisiting only if real testing shows VelbusLink
+      // struggling with the burst.
+      for (let addr = 0; addr < 1024; addr += 4) {
+        sendMemoryBlock(addr);
+      }
+    }
+
     function sendModuleStatus() {
       // 0xED — packs button-inverted status (always "normal", we don't
       // model inversion) and OC-locked status (always "unlocked", we don't
@@ -141,6 +185,43 @@ module.exports = function(RED) {
 
       if (cmd === 0xFA) { // module status request
         sendModuleStatus();
+        return;
+      }
+
+      if (cmd === 0xCB) { // memory dump request
+        sendMemoryDump();
+        return;
+      }
+
+      if (cmd === 0xC9) { // read data block from memory
+        if (body.length < 3) return;
+        const addr = (body[1] << 8) | body[2];
+        if (addr > 0x03FC) return; // out of documented range
+        sendMemoryBlock(addr);
+        return;
+      }
+
+      if (cmd === 0xFC) { // write single byte to memory
+        if (body.length < 4) return;
+        const addr = (body[1] << 8) | body[2];
+        if (addr > 0x03FF) return;
+        _memory[addr] = body[3];
+        return;
+      }
+
+      if (cmd === 0xCA) { // write 4-byte memory block
+        if (body.length < 7) return;
+        const addr = (body[1] << 8) | body[2];
+        if (addr > 0x03FC) return;
+        _memory[addr] = body[3];
+        _memory[addr + 1] = body[4];
+        _memory[addr + 2] = body[5];
+        _memory[addr + 3] = body[6];
+        // Real modules echo back a memory data block as write confirmation
+        // (confirmed: "Write memory block" remark says "Wait for 'memory
+        // data block' feedback before sending a next command") — respond
+        // the same way so VelbusLink's write sequencing isn't left waiting.
+        sendMemoryBlock(addr);
         return;
       }
 

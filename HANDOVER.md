@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.11.2, 21 nodes, published on npm.**
+Current state at time of writing: **v0.11.3, 21 nodes, published on npm.**
 
 ---
 
@@ -1391,6 +1391,17 @@ items are tracked in `coverage-roadmap.md`:
 - The Slow-on/off family: `0301`-`0304`
 - The Disable-timer family: `1201`-`1209`
 - Program groups and full time/date scheduling (see 17.3)
+
+**Foundation now built (v0.11.3), engine itself still not built:** both
+emulators now maintain a real, persistent 1024-byte memory image and
+correctly answer `0xCB`/`0xC9`/`0xFC`/`0xCA` (dump/read/write) — added to
+fix a real reported bug (VelbusLink's memory dump going unanswered
+entirely), but this is the exact storage layer the Action-assignment
+engine needs to read configured Linked Push Button entries from. The
+engine itself — watching bus traffic, matching against stored entries,
+executing the confirmed action-byte tables from 17.5/17.6 — is still not
+built. The prerequisite that used to block it (nowhere to read link
+configuration from) no longer exists.
 
 ### 17.8 Noted for later — VMB8IN-20 emulator
 
