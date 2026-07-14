@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.11.4, 21 nodes, published on npm.**
+Current state at time of writing: **v0.11.5, 21 nodes, published on npm.**
 
 ---
 
@@ -1433,7 +1433,34 @@ precisely, since both were wrong on the first pass:
   since the last one; a final flush happens on node close so a clean
   redeploy doesn't lose the last few seconds of writes.
 
-### 17.9 Noted for later — VMB8IN-20 emulator
+### 17.9 Memory write acknowledgment — required, not optional (v0.11.5)
+
+**`0xFC` (single-byte memory write) requires a `0xFE` (`COMMAND_MEMORY_DATA`)
+response echoing the written byte back — the same pattern already correctly
+used for `0xCA` block writes (echoed via `0xCC`).** Found missing entirely
+(14/07/2026: "VelbusLink stalling when writing memory back"). Without it,
+the first byte writes correctly but VelbusLink's write sequence then waits
+indefinitely for a confirmation that never arrives — a real, reproducible
+stall, not a cosmetic gap. Diagnosed against a working prior virtual-module
+implementation (a separate, earlier Node-RED-based Velbus emulator project,
+`velbus_vmb4ryld_flow.json`) rather than guessed at — that reference
+confirmed the exact pattern needed.
+
+`0xFD` (`COMMAND_READ_DATA_FROM_MEMORY`, single-byte read) was also found
+missing entirely while fixing this — confirmed present in the protocol
+document, simply never implemented. Both fixed identically in both
+emulators, since `VMB4DC`'s memory commands are confirmed identical to
+`VMB4PB`'s.
+
+**Testing gotcha worth remembering**: a test script for this hung with no
+error during development — the `setInterval` added for persistence (17.8)
+keeps Node's event loop alive indefinitely once started, which isn't a bug,
+but does mean any future test harness for these emulators needs either an
+explicit `process.exit()` at the end or a bash-level `timeout` wrapper. A
+plain hang during testing doesn't necessarily mean the product code is
+broken — check for this specific cause before assuming otherwise.
+
+### 17.10 Noted for later — VMB8IN-20 emulator
 
 A `VMB8IN-20` emulator becomes a genuinely useful addition once real
 hardware firmware supports injecting sensor data onto the bus for OLED

@@ -29,6 +29,42 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.11.5 — 14/07/2026
+
+### Fixed: VelbusLink stalling when writing memory back to either emulator
+
+- **Reported by Stuart**: read confirmed working (v0.11.3's dump fix), but
+  writing changes back stalled. Diagnosed against a working prior virtual-
+  module implementation (`velbus_vmb4ryld_flow.json`, a separate earlier
+  project) rather than guessing — that reference confirmed exactly what
+  was missing: **every single-byte write (`0xFC`) requires a `0xFE`
+  (`COMMAND_MEMORY_DATA`) acknowledgment in response, the same way `0xCA`
+  block writes are already correctly echoed back via `0xCC`.** Neither
+  emulator sent anything back after a `0xFC` write at all — the first byte
+  would write fine, then VelbusLink's write sequence would wait
+  indefinitely for a confirmation that never arrived, exactly matching
+  "stalling."
+- **Also found missing entirely while fixing this**: `0xFD`
+  (`COMMAND_READ_DATA_FROM_MEMORY`, single-byte read) — confirmed present
+  in `VMB4PB`'s own protocol document, never implemented. Added alongside
+  the `0xFC` fix, using the same `0xFE` response.
+- Both fixes applied identically to `velbus-emulate-dimmer.js`, since
+  `VMB4DC`'s memory commands are confirmed identical to `VMB4PB`'s.
+- **Testing note worth recording**: a test script hung during this session
+  with no error — turned out to be the `setInterval` added for persistence
+  (v0.11.4) keeping Node's event loop alive indefinitely, not a real bug.
+  Any future test harness for these emulators needs either an explicit
+  `process.exit()` or a bash-level `timeout` wrapper; a plain hang doesn't
+  necessarily mean broken product code.
+- Verified via the mock-RED harness: confirmed a single `0xFC` write now
+  produces exactly one `0xFE` acknowledgment, confirmed a sequence of 7
+  writes (simulating VelbusLink writing a channel name byte-by-byte)
+  produces exactly 7 acknowledgments, and confirmed the new `0xFD` handler
+  correctly reads back a previously-written byte — for both emulators,
+  with hand-checked checksums.
+
+---
+
 ## v0.11.4 — 14/07/2026
 
 ### Both emulators now persist memory across Node-RED restarts — with two real corrections along the way

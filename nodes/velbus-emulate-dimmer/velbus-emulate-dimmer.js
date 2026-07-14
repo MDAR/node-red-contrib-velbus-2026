@@ -107,6 +107,15 @@ module.exports = function(RED) {
       ]));
     }
 
+    function sendMemoryByte(addr) {
+      // 0xFE — required as a write acknowledgment after 0xFC, not just a
+      // read response. See velbus-emulate-button-io.js's comment for the
+      // full story: found missing entirely (14/07/2026), causing
+      // VelbusLink to stall writing memory back with no confirmation ever
+      // arriving.
+      node.bridge.send(pkt(0xFB, node.address, [0xFE, (addr >> 8) & 0xFF, addr & 0xFF, _memory[addr]]));
+    }
+
     function sendMemoryDump() {
       for (let addr = 0; addr < 1024; addr += 4) {
         sendMemoryBlock(addr);
@@ -192,12 +201,21 @@ module.exports = function(RED) {
         return;
       }
 
+      if (cmd === 0xFD) { // read single byte from memory
+        if (body.length < 3) return;
+        const addr = (body[1] << 8) | body[2];
+        if (addr > 0x03FF) return;
+        sendMemoryByte(addr);
+        return;
+      }
+
       if (cmd === 0xFC) { // write single byte to memory
         if (body.length < 4) return;
         const addr = (body[1] << 8) | body[2];
         if (addr > 0x03FF) return;
         _memory[addr] = body[3];
         _dirty = true;
+        sendMemoryByte(addr); // required acknowledgment, see velbus-emulate-button-io.js
         return;
       }
 

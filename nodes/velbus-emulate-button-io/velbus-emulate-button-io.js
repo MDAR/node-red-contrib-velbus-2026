@@ -156,6 +156,19 @@ module.exports = function(RED) {
       ]));
     }
 
+    function sendMemoryByte(addr) {
+      // 0xFE (COMMAND_MEMORY_DATA) — single-byte response, confirmed from
+      // protocol: DLC=4, [0xFE, addrHi, addrLo, data]. This is genuinely
+      // required as a write ACKNOWLEDGMENT too, not just a read response —
+      // found missing entirely (14/07/2026: VelbusLink stalled writing
+      // memory back to the emulator). A working prior virtual-module
+      // implementation confirmed the pattern: after every 0xFC single-byte
+      // write, echo the byte back via 0xFE, exactly as done here for 0xCA
+      // block writes via 0xCC. Without it, VelbusLink's write sequence
+      // waits indefinitely for a confirmation that never arrives.
+      node.bridge.send(pkt(0xFB, node.address, [0xFE, (addr >> 8) & 0xFF, addr & 0xFF, _memory[addr]]));
+    }
+
     function sendMemoryDump() {
       // 0xCB triggers a dump of the ENTIRE memory range as a sequence of
       // 0xCC blocks — confirmed from the protocol document (the request
@@ -241,12 +254,28 @@ module.exports = function(RED) {
         return;
       }
 
+      if (cmd === 0xFD) { // read single byte from memory — confirmed present
+        // in the protocol document, missing entirely until now (found
+        // alongside the 0xFC acknowledgment bug below).
+        if (body.length < 3) return;
+        const addr = (body[1] << 8) | body[2];
+        if (addr > 0x03FF) return;
+        sendMemoryByte(addr);
+        return;
+      }
+
       if (cmd === 0xFC) { // write single byte to memory
         if (body.length < 4) return;
         const addr = (body[1] << 8) | body[2];
         if (addr > 0x03FF) return;
         _memory[addr] = body[3];
         _dirty = true;
+        // Acknowledgment REQUIRED here, not optional — found missing
+        // entirely (14/07/2026: VelbusLink stalled writing memory back).
+        // Confirmed from a working prior virtual-module implementation:
+        // every single-byte write gets echoed back via 0xFE before
+        // VelbusLink proceeds to the next one.
+        sendMemoryByte(addr);
         return;
       }
 
