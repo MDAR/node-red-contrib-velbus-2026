@@ -36,8 +36,14 @@ module.exports = function(RED) {
     node.address = parseInt(config.address, 16) || 0;
     node.moduleName = config.moduleName || '';
     node.serial = parseInt(config.serial, 16) || 0x0001;
-    node.buildYear = parseInt(config.buildYear) || 26;
-    node.buildWeek = parseInt(config.buildWeek) || 1;
+    // Real, confirmed VelbusLink-recognised firmware build for VMB4DC,
+    // decoded directly from a genuine VLP file (14/07/2026). Same
+    // hex-not-decimal correction as velbus-emulate-button-io.js — see that
+    // file's comment for the full story. The human-readable "Firmware
+    // build" VelbusLink displays (2446) is these two raw bytes read
+    // directly as hex digits: 0x24 shows as "24", 0x46 shows as "46".
+    node.buildYear = 0x24;
+    node.buildWeek = 0x46;
 
     if (!node.bridge) {
       node.status({ fill: 'red', shape: 'ring', text: 'no bridge' });

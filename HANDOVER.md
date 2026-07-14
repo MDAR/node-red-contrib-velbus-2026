@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.11.1, 21 nodes, published on npm.**
+Current state at time of writing: **v0.11.2, 21 nodes, published on npm.**
 
 ---
 
@@ -1243,14 +1243,19 @@ worth treating as established fact, not re-deriving:
 ### 17.5 `VMB4PB` — confirmed real build number and Linked Push Button table
 
 **Real build number, confirmed directly from a genuine VelbusLink project
-file (`VMB4DC___VMB4PB.vlp`, 14/07/2026): `build="2531"`.** Decoded as
-`BuildYear=0x19` (25 decimal), `BuildWeek=0x1F` (31 decimal) — the human-
-readable build string is literally `"25"+"31"` concatenated, matching the
-same pattern confirmed for `VMB4RYLD`'s `2436` (`BY=24, BW=36`) in the
-prior session referenced above. **The currently-shipped
-`velbus-emulate-button-io.js` defaults to `buildYear: 26, buildWeek: 1` —
-a placeholder, not this confirmed real value. Given the whitelist finding
-above, this should be corrected to `0x19`/`0x1F` in the next build phase.**
+file (`VMB4DC___VMB4PB.vlp`, 14/07/2026): `build="2531"`.** **Correction
+(14/07/2026, found via direct testing):** this is `BuildYear=0x25`,
+`BuildWeek=0x31` — the two raw bytes read directly as hex digits, **not**
+decimal 25/31 needing conversion to hex. The first attempt at this section
+wrongly stated `BuildYear=0x19, BuildWeek=0x1F` (treating "25"/"31" as
+decimal values to convert) — confirmed wrong by direct testing: entering
+decimal 25/31 into the node's config produced wire bytes `0x19`/`0x1F`,
+which VelbusLink does not recognise at all, while entering `0x25`/`0x31`
+directly produces a build VelbusLink correctly displays and accepts. Fixed
+in code (v0.11.2) by hardcoding the confirmed-correct raw bytes and
+removing the editable year/week fields entirely — there's no way to expose
+this as a "year"/"week" pair without reintroducing the exact decimal/hex
+confusion that caused the bug.
 
 **Linked Push Button table location and structure**, confirmed from both
 the protocol document's own memory map and a real decoded VLP file:
@@ -1304,10 +1309,10 @@ literally any action, despite real, working links existing against it).
 
 ### 17.6 `VMB4DC` — confirmed real build number and per-channel memory layout
 
-**Real build number, confirmed the same way: `build="2446"`.** Decoded as
-`BuildYear=0x18` (24), `BuildWeek=0x2E` (46). **`velbus-emulate-dimmer.js`
-currently defaults to the same `26`/`1` placeholder — same correction
-needed in the next build phase.**
+**Real build number, confirmed the same way: `build="2446"`.** Corrected
+the same way as `VMB4PB` above: `BuildYear=0x24`, `BuildWeek=0x46` —
+raw bytes read directly as hex digits, not decimal values. Fixed in code
+(v0.11.2), editable year/week fields removed for the same reason.
 
 **Memory architecture is fundamentally different from `VMB4PB` — confirmed
 directly from a real VLP file, not assumed from naming similarity:**

@@ -29,6 +29,39 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.11.2 — 14/07/2026
+
+### Fixed a real bug in both emulators: wrong firmware build bytes transmitted
+
+- **Reported by Stuart via direct testing against real VelbusLink.** The
+  v0.11.1 documentation (and the code it described) got the build-number
+  decode wrong: it treated the human-readable build string's two halves
+  ("25"/"31" for `VMB4PB`, "24"/"46" for `VMB4DC`) as **decimal** numbers
+  needing conversion to hex bytes. They aren't — those digits **are** the
+  raw hex byte values directly. Entering decimal 25/31 into the node's
+  config produced wire bytes `0x19`/`0x1F` — a build VelbusLink doesn't
+  recognise at all and won't permit building actions against. Entering
+  `0x25`/`0x31` directly, confirmed by Stuart, produces the correct,
+  recognised build.
+- **Fixed by hardcoding the confirmed-correct real bytes** rather than
+  re-exposing this as an editable field: `velbus-emulate-button-io.js` now
+  always sends `BuildYear=0x25, BuildWeek=0x31` (`VMB4PB`);
+  `velbus-emulate-dimmer.js` now always sends `BuildYear=0x24,
+  BuildWeek=0x46` (`VMB4DC`). The editable "Build year"/"Build week" config
+  fields are removed entirely — there's no way to expose this as a
+  year/week pair without reintroducing the exact decimal/hex confusion
+  that caused the bug. Each node's editor now shows a fixed, non-editable
+  "Firmware build: 2531"/"2446" line instead.
+- **`HANDOVER.md` section 17.5/17.6 corrected to match** — the original
+  v0.11.1 write-up stated the wrong decode as if it were confirmed fact;
+  now corrected with the actual finding and how it was caught.
+- Verified via the mock-RED harness: both emulators' `0xFF` identification
+  response now transmits the exact confirmed-correct bytes (`0x25`/`0x31`
+  and `0x24`/`0x46`), checked directly against the raw packet contents, not
+  just the code that produces them.
+
+---
+
 ## v0.11.1 — 14/07/2026
 
 ### Documentation only — Action-assignment engine ground truth captured

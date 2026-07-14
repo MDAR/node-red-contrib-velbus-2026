@@ -51,8 +51,20 @@ module.exports = function(RED) {
     node.address = parseInt(config.address, 16) || 0;
     node.moduleName = config.moduleName || '';
     node.serial = parseInt(config.serial, 16) || 0x0001;
-    node.buildYear = parseInt(config.buildYear) || 26;
-    node.buildWeek = parseInt(config.buildWeek) || 1;
+    // Real, confirmed VelbusLink-recognised firmware build for VMB4PB,
+    // decoded directly from a genuine VLP file (14/07/2026) — NOT a
+    // decimal year/week that needs converting to hex. The human-readable
+    // "Firmware build" VelbusLink displays (2531) is formed by reading each
+    // half of these two raw bytes AS HEX DIGITS directly: byte 0x25 shows
+    // as "25", byte 0x31 shows as "31". Earlier code wrongly treated this
+    // as decimal 25/31 needing hex conversion, which produced the WRONG
+    // bytes (0x19/0x1F) and a build VelbusLink doesn't recognise at all —
+    // confirmed broken by direct testing. Not user-editable any more, for
+    // exactly that reason: there is no correct way to expose this as a
+    // "year"/"week" pair without reintroducing the same decimal/hex
+    // confusion that caused the bug in the first place.
+    node.buildYear = 0x25;
+    node.buildWeek = 0x31;
 
     if (!node.bridge) {
       node.status({ fill: 'red', shape: 'ring', text: 'no bridge' });

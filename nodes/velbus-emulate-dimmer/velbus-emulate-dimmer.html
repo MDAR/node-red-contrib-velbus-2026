@@ -10,8 +10,6 @@
       address:    { value: '', required: true, validate: function(v) { const n = parseInt(v, 16); return !isNaN(n) && n >= 1 && n <= 254; } },
       moduleName: { value: '' },
       serial:     { value: '0001' },
-      buildYear:  { value: 26 },
-      buildWeek:  { value: 1 },
     },
     inputs:  1,
     outputs: 1,
@@ -56,10 +54,9 @@
     <input type="text" id="node-input-serial" placeholder="0001" style="width:100px">
   </div>
   <div class="form-row">
-    <label for="node-input-buildYear"><i class="fa fa-calendar"></i> Build year</label>
-    <input type="text" id="node-input-buildYear" style="width:60px">
-    <label for="node-input-buildWeek" style="margin-left:12px; width:auto;">Week</label>
-    <input type="text" id="node-input-buildWeek" style="width:60px">
+    <label><i class="fa fa-microchip"></i> Firmware build</label>
+    <span style="font-family:monospace;">2446</span>
+    <span style="color:#888; font-size:0.85em;"> (fixed — real, VelbusLink-recognised VMB4DC build, not editable)</span>
   </div>
 </script>
 
