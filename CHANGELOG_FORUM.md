@@ -29,6 +29,36 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.12.5 — 15/07/2026
+
+### `velbus-emulate-button-io` can now accept direct output commands from Node-RED
+
+- **Requested by Stuart**, for parity with `velbus-emulate-dimmer`'s
+  existing `{ channel, percent }` input — this module's outputs (9-12)
+  previously had no Node-RED-side control at all, only the button-
+  simulation input (channels 1-4).
+- **Command set deliberately matches only what this module can genuinely
+  be commanded to do in practice** — confirmed from VelbusLink's own
+  filtered action list (`HANDOVER.md` 17.5), not the full real-relay
+  action set: `on`/`off`/`toggle` plus the Forced-*off* family
+  (`force_off`/`force_toggle`/`force_cancel`). **Deliberately no
+  `force_on`** — this module has no Forced-on action at all, confirmed
+  from real VelbusLink testing, so adding one would be pure invention with
+  no wire-level equivalent. Considered and explicitly declined.
+- **Reuses the existing `setOutput()`/`_forcedOff`/`broadcastOutputChange`
+  machinery directly** rather than a parallel implementation — a
+  Node-RED-driven `force_off` behaves identically to the same action
+  arriving over the real bus, including genuinely blocking a subsequent
+  `on` (from Node-RED *or* the bus) until specifically cancelled.
+- Verified via the mock-RED harness: all 6 commands produce the expected
+  state change; a Node-RED `force_off` followed by a *real bus* `0x02` (on)
+  command confirms the bus command is correctly ignored — cross-checking
+  that both control paths share the same guarded state, not two separate,
+  potentially inconsistent implementations. Existing button-simulation
+  input (channels 1-4) confirmed unaffected.
+
+---
+
 ## v0.12.4 — 15/07/2026
 
 ### Fixed: Forced-off action byte mapping was wrong, not the logic

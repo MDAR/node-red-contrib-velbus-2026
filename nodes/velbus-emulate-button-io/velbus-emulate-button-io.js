@@ -218,6 +218,46 @@ module.exports = function(RED) {
       node.bridge.send(pkt(0xF8, node.address, [0x00, pressed, released, long]));
     }
 
+    // Node-RED-driven output control — deliberately matches only what this
+    // module can genuinely be commanded to do in practice (confirmed from
+    // VelbusLink's real filtered action list, HANDOVER.md 17.5): on/off/
+    // toggle plus the Forced-*off* family only. No force_on — this module
+    // has no Forced-on action at all, so adding one would be pure
+    // Node-RED-side invention with no real wire-level equivalent, decided
+    // against on 15/07/2026. Reuses setOutput()/_forcedOff/
+    // broadcastOutputChange directly, so this behaves identically to the
+    // same commands arriving over the bus — a Node-RED "on" is silently
+    // ignored on a forced-off channel exactly like a real 0x02 would be.
+    function executeOutputCommand(ch, cmd) {
+      const idx = ch - 9;
+      switch (cmd) {
+        case 'on':
+          setOutput(idx, true);
+          break;
+        case 'off':
+          setOutput(idx, false);
+          break;
+        case 'toggle':
+          setOutput(idx, !_outputs[idx]);
+          break;
+        case 'force_off': // 0806 semantics — sticky until cancelled
+          _forcedOff[idx] = true;
+          _outputs[idx] = false;
+          break;
+        case 'force_toggle': // 0810 semantics
+          _forcedOff[idx] = !_forcedOff[idx];
+          if (_forcedOff[idx]) _outputs[idx] = false;
+          break;
+        case 'force_cancel': // 0809 semantics — unconditional release
+          _forcedOff[idx] = false;
+          break;
+        default:
+          return false;
+      }
+      broadcastOutputChange(ch);
+      return true;
+    }
+
     // ── Action-assignment engine ─────────────────────────────────────────
     // Reads the Linked Push Button table VelbusLink writes into this
     // module's own memory (confirmed location: 0x0128-0x0253, 5 bytes per
@@ -489,8 +529,19 @@ module.exports = function(RED) {
       const inp = (msg && msg.payload && typeof msg.payload === 'object') ? msg.payload : {};
       const ch = parseInt(inp.channel);
 
+      if (ch >= 9 && ch <= 12) {
+        const cmd = inp.cmd;
+        if (!['on', 'off', 'toggle', 'force_off', 'force_toggle', 'force_cancel'].includes(cmd)) {
+          node.warn('velbus-emulate-button-io: "cmd" must be on, off, toggle, force_off, force_toggle, or force_cancel');
+          return;
+        }
+        executeOutputCommand(ch, cmd);
+        setStatus('out' + ch + ' ' + cmd, 'green');
+        return;
+      }
+
       if (!ch || ch < 1 || ch > 4) {
-        node.warn('velbus-emulate-button-io: input requires "channel": 1-4');
+        node.warn('velbus-emulate-button-io: input requires "channel": 1-4 (button) or 9-12 (output)');
         return;
       }
 

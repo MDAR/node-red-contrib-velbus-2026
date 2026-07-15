@@ -118,7 +118,7 @@
     real linked module respond.</li>
   </ol>
 
-  <h3>Input — simulate a button event</h3>
+  <h3>Input — simulate a button event (channels 1-4)</h3>
   <pre>
 { "channel": 1, "event": "press" }
 { "channel": 1, "event": "release" }
@@ -128,6 +128,27 @@
   if omitted. A normal button press is a <code>press</code> immediately followed
   by a <code>release</code> — send both, same as a real physical press-and-release,
   if the link you're testing depends on distinguishing them.</p>
+
+  <h3>Input — control an output directly (channels 9-12)</h3>
+  <pre>
+{ "channel": 9, "cmd": "on" }
+{ "channel": 9, "cmd": "off" }
+{ "channel": 9, "cmd": "toggle" }
+{ "channel": 9, "cmd": "force_off" }
+{ "channel": 9, "cmd": "force_toggle" }
+{ "channel": 9, "cmd": "force_cancel" }
+  </pre>
+  <p><code>channel</code> is 9-12. This command set deliberately matches only
+  what this module can genuinely be commanded to do in practice — confirmed
+  from VelbusLink's own filtered action list, not the full real-relay action
+  set. Notably <strong>no <code>force_on</code></strong>: this module has no
+  Forced-on action at all, so there's nothing for it to correspond to.
+  These commands behave identically to the same actions arriving over the
+  real bus — a <code>force_off</code> genuinely sticks (ignoring subsequent
+  <code>on</code>/<code>toggle</code> commands, from Node-RED <em>or</em> the
+  bus, until <code>force_cancel</code> or <code>force_toggle</code> releases
+  it), matching real forced-off semantics rather than a simplified
+  approximation.</p>
 
   <h3>Output — reflects real incoming output commands</h3>
   <p>

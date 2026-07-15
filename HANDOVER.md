@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.12.4, 21 nodes, published on npm.**
+Current state at time of writing: **v0.12.5, 21 nodes, published on npm.**
 
 ---
 
@@ -1376,6 +1376,15 @@ final in-scope/out-of-scope split, agreed 14/07/2026:
 byte-confirmed per 17.5):** General (`0101`-`0104`) + Forced-off family
 (`0806`-`0810`). Nothing else — confirmed this module's real action list
 genuinely has no Forced-on, timer, or Inhibit options at all.
+
+**Node-RED-side output control (v0.12.5)** deliberately mirrors this exact
+scope, not a broader convenience set: `velbus-emulate-button-io`'s input
+accepts `{channel: 9-12, cmd: "on"|"off"|"toggle"|"force_off"|
+"force_toggle"|"force_cancel"}` — no `force_on`, considered and explicitly
+declined (15/07/2026) since this module has no such action to correspond
+to. Reuses the same `setOutput()`/`_forcedOff` state the bus-facing action
+engine uses, so Node-RED and real bus commands can't disagree about a
+channel's forced state.
 
 **In scope, `VMB4DC` channels as subject (byte-confirmed: `0103`, `0202`,
 `0214` only — the rest below are scoped but not yet individually
