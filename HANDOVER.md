@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.13.1, 22 nodes, published on npm.**
+Current state at time of writing: **v0.13.2, 22 nodes, published on npm.**
 
 ---
 
@@ -1682,6 +1682,33 @@ time parameter is accepted (skipped if zero, matching the protocol's own
 documented remark) but not genuinely timed — locking is immediate and
 permanent until explicitly unlocked, since this is incidental to the
 module's actual purpose rather than something needing full fidelity.
+
+**A second, genuinely separate mechanism caused the channels to still show
+Disabled after the above fix (v0.13.2)** — found via a real byte-level diff
+rather than more guessing: Stuart supplied a real reference `VMB7IN`'s
+complete memory, confirmed correct in his own VelbusLink. Dumped this
+emulator's own memory for a matching config and diffed byte-for-byte
+against it. Confirmed `0x0080`-`0x0087` (Channel 1-8 reaction time) has
+its own explicit special value — `0xFF` = "Channel disabled" — completely
+independent of `0x0091`/`0x0092`. The blanket fill left every reaction
+time at exactly that value. Fixed: each enabled counter's channel gets
+`0x05` (0.065s, matching the real reference module's own value exactly,
+not an arbitrary different valid choice).
+
+**Worth repeating the lesson from 18.7's first fix, now proven twice**: a
+blanket `0xFF` fill is fine for genuinely unconfigured data, but multiple
+*independent* status mechanisms can each have their own "0xFF means
+disabled" convention, and finding all of them by reading documentation
+alone is unreliable — this second one wasn't caught by the first
+documentation pass at all. **139 further byte differences remain** between
+this emulator's memory and the full real reference dump, believed
+unrelated to this specific symptom (channel 5-8 defaults, multi-function/
+dual-function/alarm-clock configuration tied to button-input features,
+not the counter function) but not individually confirmed. A full
+byte-level diff against a real reference file, the way this fix was found,
+is the reliable way to resolve anything from that remaining set if it
+turns out to matter in practice — worth reaching for that method directly
+next time, rather than another documentation-only pass.
 
 ### 18.8 Auto-send mode
 

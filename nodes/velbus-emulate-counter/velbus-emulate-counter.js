@@ -154,6 +154,26 @@ module.exports = function(RED) {
       // opposite of a usable default. Both explicitly cleared to 0x00 here.
       _memory[0x0091] = 0x00; // all channel programs enabled
       _memory[0x0092] = 0x00; // all channels unlocked
+
+      // Confirmed a SEPARATE, genuinely different bug (15/07/2026) via a
+      // direct byte-level diff against a real reference VMB7IN Stuart
+      // configured and confirmed correct: 0x0080-0x0087 (Channel 1-8
+      // reaction time) is documented with an explicit special value —
+      // "H'FF' Channel disabled" — completely different from the 0x0091/
+      // 0x0092 fields above. The blanket 0xFF fill left every channel's
+      // reaction time at exactly that "disabled" value, including the 4
+      // configured/enabled channels — this was the actual remaining cause
+      // of channels showing Disabled even after the 0x0091/0x0092 fix.
+      // The real reference module uses 0x05 (0.065s, the fastest/most
+      // sensitive valid reaction time) for its 4 active channels — matched
+      // here exactly rather than picking an arbitrary different valid value.
+      _counters.forEach(function(c, idx) {
+        if (c.enabled) _memory[0x0080 + idx] = 0x05;
+        // Channels genuinely left disabled correctly keep 0xFF here — that
+        // really is what "disabled" is supposed to look like for an unused
+        // channel, confirmed from the same reference file (channels 5-8,
+        // which Stuart isn't using, show 0xFF here too).
+      });
     })();
 
     // ── Live data → wire format conversion ──────────────────────────────

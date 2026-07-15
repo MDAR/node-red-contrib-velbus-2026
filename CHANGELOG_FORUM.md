@@ -29,6 +29,42 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.13.2 — 15/07/2026
+
+### Fixed: the 4 configured channels still showed as Disabled after v0.13.1
+
+- **Reported by Stuart**: locking was resolved, but the important first
+  four channels still read as Disabled — and manually enabling them via
+  VelbusLink triggered a write-back that put it out of sync.
+- **Root cause found via a genuine full byte-level diff**, not more
+  guessing: Stuart supplied a real reference `VMB7IN`'s complete memory
+  (configured and confirmed correct in his own VelbusLink), which was
+  dumped and directly diffed byte-for-byte against this emulator's own
+  memory image for a matching configuration. Confirmed a completely
+  separate mechanism from the `0x0091`/`0x0092` fields fixed in v0.13.1:
+  `0x0080`-`0x0087` (Channel 1-8 reaction time) is documented with an
+  explicit special value — `0xFF` = "Channel disabled" — and the blanket
+  `0xFF` memory fill left every channel's reaction time at exactly that
+  value, including the 4 configured/enabled ones.
+- **Fixed**: each enabled counter's channel now gets `0x05` (0.065s, the
+  fastest valid reaction time) — matched exactly to what the real
+  reference module uses, rather than picking an arbitrary different valid
+  value. Genuinely unused channels correctly keep `0xFF`, confirmed
+  correct from the same reference file (its own unused channels 5-8 show
+  `0xFF` there too).
+- **139 further byte differences remain** between this emulator's memory
+  and the full real reference dump — believed unrelated to the reported
+  symptom (channel 5-8 defaults, multi-function/dual-function/alarm-clock
+  configuration tied to `VMB7IN`'s button-input features, not its counter
+  function) but not yet individually confirmed one-by-one. Not addressed
+  in this fix; flagged for follow-up if any turn out to matter in practice.
+- Verified via a direct memory dump comparison: reaction-time bytes for
+  the 4 configured channels now match the real reference exactly
+  (`05 05 05 05`), and the total diff count dropped from 143 to 139 —
+  precisely the 4 bytes this fix targeted, nothing else moved.
+
+---
+
 ## v0.13.1 — 15/07/2026
 
 ### Fixed: every channel showed as disabled and locked in real VelbusLink
