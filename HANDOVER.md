@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.12.5, 21 nodes, published on npm.**
+Current state at time of writing: **v0.12.6, 21 nodes, published on npm.**
 
 ---
 
@@ -1385,6 +1385,22 @@ declined (15/07/2026) since this module has no such action to correspond
 to. Reuses the same `setOutput()`/`_forcedOff` state the bus-facing action
 engine uses, so Node-RED and real bus commands can't disagree about a
 channel's forced state.
+
+**Forced state wasn't being broadcast at all until v0.12.6** — confirmed
+state tracking (`_forcedOff[]`) was correct, but nothing told VelbusLink
+about it. Fixed by confirming, from the protocol document rather than
+guessing, that `0xED`'s `DATABYTE4` upper nibble (documented as OC
+"locked/unlocked") is the same status bit real VelbusLink reads to show
+"Forced" — the document's own section headers for
+`COMMAND_FORCED_OFF`/`COMMAND_CANCEL_FORCED_OFF` are literally titled
+"Lock channel"/"Unlock channel". `DATABYTE4` bits 4-7 now reflect
+`_forcedOff[]` correctly. **Still open**: `DATABYTE5` is separately
+documented as "locked channel status" with no further per-channel bit
+breakdown given anywhere in the protocol document — left at `0x00` rather
+than guess at an unconfirmed layout, given how the Forced-off action-byte
+mapping was already wrong once from a similar kind of unverified
+assumption. Revisit if VelbusLink's display still looks incomplete after
+the `DATABYTE4` fix.
 
 **In scope, `VMB4DC` channels as subject (byte-confirmed: `0103`, `0202`,
 `0214` only — the rest below are scoped but not yet individually

@@ -29,6 +29,39 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.12.6 — 15/07/2026
+
+### Fixed: forced-off state was never broadcast, so VelbusLink never showed it
+
+- **Reported by Stuart**: forced outputs work correctly (confirmed working
+  in harmony with plain toggles, v0.12.4), but VelbusLink's own display
+  never showed the forced indication.
+- **Root cause, confirmed from the protocol document rather than guessed**:
+  `DATABYTE4`'s upper nibble in the `0xED` module status broadcast is
+  documented as open-collector "locked/unlocked" — and the protocol
+  document's own section headers for `COMMAND_FORCED_OFF`/
+  `COMMAND_CANCEL_FORCED_OFF` are literally titled "Lock channel"/"Unlock
+  channel". On this module, "locked" and "forced off" are the same status
+  bit. The code hardcoded this nibble to always-unlocked regardless of
+  actual forced state — output on/off was broadcast correctly, but nothing
+  ever told VelbusLink a channel was forced.
+- **Fixed**: `DATABYTE4` bits 4-7 now reflect `_forcedOff[]` per channel,
+  matching the documented bit-per-channel layout exactly.
+- **Left deliberately unset, flagged rather than guessed**: `DATABYTE5`
+  is separately documented as "locked channel status" with no further
+  per-channel bit breakdown given anywhere in the protocol document. Could
+  be redundant with `DATABYTE4`'s nibble, could cover a different channel
+  range — genuinely unclear from the documentation alone. Left at `0x00`
+  rather than risk another mapping error the way the Forced-off action
+  bytes were wrong before real VLP testing caught it.
+- Verified via the mock-RED harness: forcing channel 9 sets bit4, also
+  forcing channel 11 sets bit6 while bit4 remains set, and cancelling
+  channel 9 clears bit4 while bit6 stays — checked against the actual
+  packet bytes, not just that the forced-state logic itself runs
+  (which was already correct; only the broadcast was missing).
+
+---
+
 ## v0.12.5 — 15/07/2026
 
 ### `velbus-emulate-button-io` can now accept direct output commands from Node-RED

@@ -183,14 +183,25 @@ module.exports = function(RED) {
 
     function sendModuleStatus() {
       // 0xED — packs button-inverted status (always "normal", we don't
-      // model inversion) and OC-locked status (always "unlocked", we don't
-      // model Program-Step-based locking) into DATABYTE4; DATABYTE8 is the
-      // real, meaningful part — actual output on/off state.
+      // model inversion) into the low nibble of DATABYTE4; the high nibble
+      // is OC channel locked/unlocked — confirmed (15/07/2026) this is the
+      // SAME status bit VelbusLink reads to display "Forced" state: the
+      // protocol document's own section headers for COMMAND_FORCED_OFF/
+      // COMMAND_CANCEL_FORCED_OFF are literally titled "Lock channel"/
+      // "Unlock channel" — on this module, "locked" and "forced off" are
+      // the same concept. Previously hardcoded to always-unlocked
+      // regardless of _forcedOff[], so VelbusLink never showed forced
+      // outputs as forced at all — found via real testing, not something
+      // caught by the mock harness, since nothing was asserting against
+      // real VelbusLink's own display logic.
       const db2 = 0x00; // no buttons currently pressed (momentary — rest state)
       const db3 = 0x0F; // all 4 buttons "enabled" (bits 0-3) — always true here
-      const db4 = 0x0F; // bits 0-3: buttons 1-4 normal (1=normal, we don't model inversion);
-                         // bits 4-7: OC 1-4 unlocked (0=unlocked, we don't model locking)
-      const db5 = 0x00; // nothing locked
+      let db4 = 0x0F; // bits 0-3: buttons 1-4 normal (1=normal, we don't model inversion)
+      for (let i = 0; i < 4; i++) if (_forcedOff[i]) db4 |= (1 << (4 + i)); // bits 4-7: OC 1-4 locked/forced
+      const db5 = 0x00; // separate "locked channel status" byte — documented
+                         // with no further per-channel bit breakdown found in
+                         // the protocol document, so left unset rather than
+                         // guess at an unconfirmed layout (see HANDOVER.md)
       const db6 = 0x00; // channel program not disabled (irrelevant, no Program Steps here)
       const db7 = 0x00; // no alarm/program/sunrise/sunset state modelled
       let db8 = 0x00;
