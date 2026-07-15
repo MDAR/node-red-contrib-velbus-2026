@@ -1,6 +1,6 @@
 {
   "name": "node-red-contrib-velbus-2026",
-  "version": "0.12.8",
+  "version": "0.13.0",
   "description": "Node-RED palette for Velbus building automation \u2014 relay, dimmer, glass panel, PIR, blind, sensor, meteo, clock nodes. Original and V2 (-20) series.",
   "keywords": [
     "node-red",
@@ -34,7 +34,8 @@
       "velbus-clock": "nodes/velbus-clock/velbus-clock.js",
       "velbus-energy": "nodes/velbus-energy/velbus-energy.js",
       "velbus-emulate-button-io": "nodes/velbus-emulate-button-io/velbus-emulate-button-io.js",
-      "velbus-emulate-dimmer": "nodes/velbus-emulate-dimmer/velbus-emulate-dimmer.js"
+      "velbus-emulate-dimmer": "nodes/velbus-emulate-dimmer/velbus-emulate-dimmer.js",
+      "velbus-emulate-counter": "nodes/velbus-emulate-counter/velbus-emulate-counter.js"
     },
     "examples": "examples"
   },

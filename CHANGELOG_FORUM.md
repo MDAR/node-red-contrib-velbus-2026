@@ -29,6 +29,70 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.13.0 — 15/07/2026
+
+### New: `velbus-emulate-counter` — third-party data onto the bus, displayed natively
+
+- **The actual goal this whole evaluation was working towards**: get
+  third-party data (MQTT, Modbus, anything Node-RED can reach) onto the
+  Velbus bus as a genuine module, so VelbusLink can assign it to a real
+  OLED Counter page (`VMBGPOD`/`VMBELO`) and display it natively — not a
+  single scrolling Memo-Text banner.
+- **Emulates a real `VMB7IN`** (pulse-counting utility meter interface —
+  confirmed genuinely generic across electricity/gas/water, same wire
+  format for all three, distinguished only by configured scale and unit).
+  Real build number `2306` confirmed from a real installation, same
+  discovery mechanism already proven for `VMB4PB`/`VMB4DC`.
+- **Full protocol confirmed against a real, live installation** — not just
+  documentation: the memory layout (per-counter combined enable+scale
+  byte, 32-bit cumulative value, shared units byte, shared auto-send
+  byte), the two-part scale encoding (base 1-63 × multiplier
+  ×1/×2.5/×0.05/×0.01 — confirmed necessary from a real config using two
+  different tiers across its four counters), and the live broadcast
+  format were all decoded directly from Stuart's own real `VMB7IN`/
+  `VMBGPOD`/`VMBMETEO` setup, cross-checked against real bus traffic.
+- **Deliberately no write-back support for configuration** — confirmed
+  design decision: "I am NOT seeing a situation where VelbusLink would
+  write back the settings, so whatever the Node is declaring, can come
+  from its own config." Memory read/write commands are still answered
+  correctly regardless (including the write-acknowledgment fix already
+  learned the hard way on the other emulators), but configuration is
+  entirely declared by this node's own settings.
+- **Live data input accepts cumulative and current-rate independently**
+  (`{channel, cumulative?, currentRate?}`, either optional) — confirmed
+  necessary: "current value is different to accumulated value," and a
+  real meter typically reports these as two separate readings, not one
+  combined value. Internally reverses the module's own documented
+  formulas to compute the wire-format pulse count and inter-pulse period.
+- **Two real bugs caught by this node's own round-trip testing before
+  shipping**: an early version used the Power formula's constant
+  universally, giving wildly wrong results for liter/m³ counters (Flow
+  uses a 1000x smaller constant than Power) — caught by testing the
+  conversion against known values rather than trusting the arithmetic;
+  and an early test harness had a byte-offset-by-one bug in its own
+  verification code, initially making a *correct* result look wrong until
+  traced properly.
+- **Auto-send mode**: the three genuine real hardware modes (fixed
+  10-255s interval, on-change with a 5-9s minimum, disabled/poll-only —
+  the module still answers an explicit Counter status request in every
+  mode) plus one Node-RED-native addition, "On inject" — broadcasts
+  immediately on every input with no throttling, requested explicitly
+  since "data arrived" is a meaningful event for this use case in a way
+  it isn't for real pulse hardware.
+- **Persistence deliberately simpler than the other two emulators**: no
+  `node.context()` layer at all. Configuration already persists via the
+  flow's own JSON; live counter values (cumulative + rate) always reset
+  on restart — confirmed: "values are flushed as we'd be looking at the
+  upstream device to provide those or the installer will have to persist
+  them."
+- Verified via the mock-RED harness: identification, memory read/write/
+  dump, an explicit Counter status request, all four auto-send modes, and
+  full round-trip conversion (cumulative + rate → wire format → decoded
+  back) confirmed exact for a kWh counter and within expected integer-
+  pulse rounding tolerance for a non-round liter scale.
+
+---
+
 ## v0.12.8 — 15/07/2026
 
 ### Documentation only — proper links for the alternative TCP gateway options

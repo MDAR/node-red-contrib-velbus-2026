@@ -1,0 +1,267 @@
+<script type="text/javascript">
+(function() {
+
+  const MULTIPLIERS = [1, 2.5, 0.05, 0.01];
+
+  // Generates the achievable pulses-per-unit list exactly matching the
+  // confirmed real encoding (base 1-63 x multiplier), deduplicated and
+  // sorted, so the dropdown never offers a value this node can't actually
+  // represent on the wire.
+  function achievableScaleValues() {
+    const seen = new Map();
+    for (let mIdx = 0; mIdx < MULTIPLIERS.length; mIdx++) {
+      for (let base = 1; base <= 63; base++) {
+        const v = Math.round(base * 100 * MULTIPLIERS[mIdx] * 100) / 100;
+        if (!seen.has(v)) seen.set(v, true);
+      }
+    }
+    return Array.from(seen.keys()).sort((a, b) => a - b);
+  }
+
+  function populateScaleDropdown($select, currentValue) {
+    $select.empty();
+    $select.append($('<option>').val('0').text('Disabled'));
+    achievableScaleValues().forEach(function(v) {
+      $select.append($('<option>').val(String(v)).text(v + ' pulses/unit'));
+    });
+    if (currentValue !== undefined && currentValue !== null && currentValue !== '') {
+      // If the stored value isn't exactly in the achievable list (e.g. hand-edited
+      // flow JSON), add it so nothing silently disappears from the field.
+      const num = parseFloat(currentValue);
+      if (!isNaN(num) && $select.find('option[value="' + num + '"]').length === 0) {
+        $select.append($('<option>').val(String(num)).text(num + ' pulses/unit (not exactly achievable — closest will be used)'));
+      }
+      $select.val(String(num));
+    } else {
+      $select.val('0');
+    }
+  }
+
+  RED.nodes.registerType('velbus-emulate-counter', {
+    category:  'Velbus (emulate)',
+    color:     '#C97B4A',
+    defaults: {
+      name:        { value: '' },
+      bridge:      { value: '', type: 'velbus-bridge', required: true },
+      address:     { value: '', required: true, validate: function(v) { const n = parseInt(v, 16); return !isNaN(n) && n >= 1 && n <= 254; } },
+      moduleName:  { value: '' },
+      serial:      { value: '0001' },
+      counter1PulsesPerUnit: { value: 1000 }, counter1Unit: { value: '3' }, counter1Name: { value: 'Counter 1' },
+      counter2PulsesPerUnit: { value: 0 },    counter2Unit: { value: '3' }, counter2Name: { value: 'Counter 2' },
+      counter3PulsesPerUnit: { value: 0 },    counter3Unit: { value: '3' }, counter3Name: { value: 'Counter 3' },
+      counter4PulsesPerUnit: { value: 0 },    counter4Unit: { value: '3' }, counter4Name: { value: 'Counter 4' },
+      autoSendMode:    { value: 'oninject' },
+      autoSendSeconds: { value: 5 },
+    },
+    inputs:  1,
+    outputs: 0,
+    icon:    'font-awesome/fa-microchip',
+    paletteLabel: 'emulate counter',
+
+    label: function() {
+      return this.name || this.moduleName ||
+        ('VMB7IN 0x' + (this.address || '??').toUpperCase());
+    },
+
+    oneditprepare: function() {
+      if (!this.serial || this.serial === '0001') {
+        $('#node-input-serial').val((Math.floor(Math.random() * 0xFFFF)).toString(16).padStart(4, '0').toUpperCase());
+      }
+      for (let i = 1; i <= 4; i++) {
+        populateScaleDropdown($('#node-input-counter' + i + 'PulsesPerUnit'), this['counter' + i + 'PulsesPerUnit']);
+      }
+
+      function refreshSecondsRange() {
+        const mode = $('#node-input-autoSendMode').val();
+        const $sec = $('#node-input-autoSendSeconds');
+        const $row = $('#autosend-seconds-row');
+        if (mode === 'fixed') { $row.show(); $sec.attr('min', 10).attr('max', 255); }
+        else if (mode === 'onchange') { $row.show(); $sec.attr('min', 5).attr('max', 9); }
+        else { $row.hide(); }
+      }
+      $('#node-input-autoSendMode').on('change', refreshSecondsRange);
+      refreshSecondsRange();
+    }
+  });
+
+})();
+</script>
+
+<script type="text/html" data-template-name="velbus-emulate-counter">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-bridge"><i class="fa fa-link"></i> Bridge</label>
+    <input type="text" id="node-input-bridge">
+  </div>
+  <div class="form-row">
+    <label for="node-input-address"><i class="fa fa-hashtag"></i> Address (hex)</label>
+    <input type="text" id="node-input-address" placeholder="e.g. 50" style="width:100px">
+  </div>
+  <div class="form-row">
+    <label for="node-input-moduleName"><i class="fa fa-i-cursor"></i> Module name</label>
+    <input type="text" id="node-input-moduleName" placeholder="Optional — shown in VelbusLink">
+  </div>
+  <div class="form-row">
+    <label for="node-input-serial"><i class="fa fa-barcode"></i> Serial (hex)</label>
+    <input type="text" id="node-input-serial" placeholder="0001" style="width:100px">
+  </div>
+  <div class="form-row">
+    <label><i class="fa fa-microchip"></i> Firmware build</label>
+    <span style="font-family:monospace;">2306</span>
+    <span style="color:#888; font-size:0.85em;"> (fixed — real, VelbusLink-recognised VMB7IN build, not editable)</span>
+  </div>
+
+  <hr>
+  <div class="form-row"><b>Counters</b> — leave "Pulses per unit" at Disabled for any channel not in use.</div>
+
+  <div class="form-tips" style="margin-bottom:8px;">
+    No write-back is expected from VelbusLink — everything below is what this
+    node declares. See Help for the reasoning.
+  </div>
+
+  <div class="form-row" style="border-top:1px solid #ccc; padding-top:8px;">
+    <label style="width:100px">Counter 1</label>
+    <input type="text" id="node-input-counter1Name" style="width:140px" placeholder="Name">
+    <select id="node-input-counter1Unit" style="width:90px">
+      <option value="0">reserved</option><option value="1">liter</option><option value="2">m³</option><option value="3">kWh</option>
+    </select>
+    <select id="node-input-counter1PulsesPerUnit" style="width:200px"></select>
+  </div>
+  <div class="form-row">
+    <label style="width:100px">Counter 2</label>
+    <input type="text" id="node-input-counter2Name" style="width:140px" placeholder="Name">
+    <select id="node-input-counter2Unit" style="width:90px">
+      <option value="0">reserved</option><option value="1">liter</option><option value="2">m³</option><option value="3">kWh</option>
+    </select>
+    <select id="node-input-counter2PulsesPerUnit" style="width:200px"></select>
+  </div>
+  <div class="form-row">
+    <label style="width:100px">Counter 3</label>
+    <input type="text" id="node-input-counter3Name" style="width:140px" placeholder="Name">
+    <select id="node-input-counter3Unit" style="width:90px">
+      <option value="0">reserved</option><option value="1">liter</option><option value="2">m³</option><option value="3">kWh</option>
+    </select>
+    <select id="node-input-counter3PulsesPerUnit" style="width:200px"></select>
+  </div>
+  <div class="form-row">
+    <label style="width:100px">Counter 4</label>
+    <input type="text" id="node-input-counter4Name" style="width:140px" placeholder="Name">
+    <select id="node-input-counter4Unit" style="width:90px">
+      <option value="0">reserved</option><option value="1">liter</option><option value="2">m³</option><option value="3">kWh</option>
+    </select>
+    <select id="node-input-counter4PulsesPerUnit" style="width:200px"></select>
+  </div>
+
+  <hr>
+  <div class="form-row">
+    <label for="node-input-autoSendMode"><i class="fa fa-clock-o"></i> Auto-send mode</label>
+    <select id="node-input-autoSendMode" style="width:220px">
+      <option value="oninject">On inject (immediate, every input)</option>
+      <option value="onchange">On change (real hardware mode)</option>
+      <option value="fixed">Fixed interval (real hardware mode)</option>
+      <option value="disabled">Disabled (poll-only)</option>
+    </select>
+  </div>
+  <div class="form-row" id="autosend-seconds-row">
+    <label for="node-input-autoSendSeconds" style="width:220px">Interval (seconds)</label>
+    <input type="text" id="node-input-autoSendSeconds" style="width:80px">
+  </div>
+</script>
+
+<script type="text/html" data-help-name="velbus-emulate-counter">
+  <p>
+    <strong>Emulates a real VMB7IN</strong> — a pulse-counting utility meter
+    interface (electricity, gas, or water; the same wire format works for
+    all three, distinguished only by configured unit and scale). Confirmed
+    through direct evaluation against a real installation, not assumed from
+    documentation alone: this is the practical way to get third-party data
+    (MQTT, Modbus, anything Node-RED can reach) onto the Velbus bus as a
+    genuine module, so VelbusLink can discover it and assign it to a real
+    OLED Counter page (VMBGPOD/VMBELO) — displayed natively, not as a single
+    scrolling Memo-Text banner.
+  </p>
+
+  <h3>Why no write-back — a deliberate design choice, not a limitation</h3>
+  <p>
+    Real VMB7IN configuration (which channels are enabled, their pulse
+    scale, their unit) is entirely declared by this node's own settings
+    below, not written by VelbusLink. This was an explicit decision: "I am
+    NOT seeing a situation where VelbusLink would write back the settings,
+    so whatever the Node is declaring, can come from its own config."
+    Memory read/write commands are still answered correctly (including the
+    write-acknowledgment real VelbusLink requires — confirmed the hard way
+    on the button/dimmer emulators, where a missing acknowledgment caused
+    VelbusLink's own write sequence to stall), so nothing breaks if
+    VelbusLink does attempt an incidental write — it's just not the
+    intended way this node gets configured.
+  </p>
+
+  <h3>Setup</h3>
+  <ol>
+    <li>Set an address this module doesn't already use on the real bus.</li>
+    <li>Configure each counter you want to use below — name, unit, and
+    pulses-per-unit. Leave "Pulses per unit" at Disabled for unused channels.</li>
+    <li>Deploy. A bus scan will find a real-looking VMB7IN at that address.</li>
+    <li>In VelbusLink, open a VMBGPOD/VMBELO's Counter page configuration
+    and assign this module's address + channel — exactly as you would a
+    real VMB7IN.</li>
+    <li>Feed live data via the input below.</li>
+  </ol>
+
+  <h3>Pulses-per-unit — not every value is achievable</h3>
+  <p>
+    Real VMB7IN hardware encodes this as a base value (1-63) combined with
+    a multiplier (×1 / ×2.5 / ×0.05 / ×0.01) — confirmed from a real
+    configured installation using two different multiplier tiers across
+    its four counters. The dropdown only offers values this encoding can
+    actually represent exactly, so nothing you pick will silently round to
+    something else.
+  </p>
+
+  <h3>Input — live data</h3>
+  <pre>
+{ "channel": 1, "cumulative": 59969.5, "currentRate": 2142.8 }
+  </pre>
+  <p>
+    <code>channel</code> is 1-4, matching a counter configured as enabled
+    above. <code>cumulative</code> and <code>currentRate</code> are each
+    optional — send either one, both, or update them independently as your
+    upstream source provides them (a real meter typically reports these as
+    two separate readings, not one combined value). <code>cumulative</code>
+    is the running total in whatever unit is configured (kWh/liter/m³);
+    <code>currentRate</code> is the instantaneous rate (W for kWh counters,
+    l/h or m³/h for liter/m³ counters). Omitting <code>currentRate</code>
+    (or sending 0) reports "no recent pulse" — matching real hardware's
+    overflow behaviour when there's genuinely no current flow.
+  </p>
+  <p>
+    Live values are never persisted across a Node-RED restart — this
+    node's job is to relay, not remember; re-supplying current readings
+    after a restart is the harvesting flow's (or the upstream device's)
+    responsibility. Configuration (names, scale, unit) does persist,
+    because it's part of this node's own settings, saved with the flow.
+  </p>
+
+  <h3>Auto-send mode</h3>
+  <p>
+    <strong>On inject</strong> (default) — broadcasts immediately every
+    time new data arrives, no throttling. Not a real hardware mode; added
+    specifically for this use case, where "data arrived" is a meaningful,
+    Node-RED-native event in a way it isn't for a real meter's own pulse
+    hardware.
+  </p>
+  <p>
+    <strong>On change</strong>/<strong>Fixed interval</strong> — genuine
+    real hardware modes (on-change: broadcasts only when the value
+    changes, no more often than the configured 5-9s minimum; fixed:
+    broadcasts unconditionally every 10-255s regardless of change).
+  </p>
+  <p>
+    <strong>Disabled</strong> — no proactive broadcasting at all; only
+    answers an explicit Counter status request (matching real hardware's
+    poll-only mode).
+  </p>
+</script>

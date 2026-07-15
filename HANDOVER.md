@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.12.8, 21 nodes, published on npm.**
+Current state at time of writing: **v0.13.0, 22 nodes, published on npm.**
 
 ---
 
@@ -29,7 +29,8 @@ Current state at time of writing: **v0.12.8, 21 nodes, published on npm.**
 15. [Where to find protocol references](#15-where-to-find-protocol-references)
 16. [Code style rules](#16-code-style-rules)
 17. [Module emulators — architecture and scope reasoning](#17-module-emulators--architecture-and-scope-reasoning)
-18. [License and attribution](#18-license-and-attribution)
+18. [velbus-emulate-counter — third-party data onto the bus, displayed natively](#18-velbus-emulate-counter--third-party-data-onto-the-bus-displayed-natively)
+19. [License and attribution](#19-license-and-attribution)
 
 ---
 
@@ -316,6 +317,7 @@ or a string before assuming the parsing logic itself is wrong.
 | `velbus-energy` | Velbus (inputs) | VMBPSUMNGR-20 — power supply manager: PSU load percentages, live wattage/voltage/amperage per rail, a warranty (hours-in-operation) counter, and PSU/warranty alarm status |
 | `velbus-emulate-button-io` | Velbus (emulate) | **Module emulator, not a controller** — emulates a real `VMB4PB` in "I/O module" mode (4 button inputs + 4 open-collector outputs). Receives commands, transmits status/identification — the opposite direction to every other node above. See section 17 for the architecture. |
 | `velbus-emulate-dimmer` | Velbus (emulate) | **Module emulator, not a controller** — emulates a real `VMB4DC`. Same opposite-direction role as `velbus-emulate-button-io`. See section 17. |
+| `velbus-emulate-counter` | Velbus (emulate) | **Module emulator, not a controller** — emulates a real `VMB7IN` pulse-counting utility meter. Purpose: third-party data (MQTT/Modbus) onto the bus, displayed natively on OLED Counter pages. Deliberately no write-back, no `node.context()` persistence. See section 18. |
 
 Palette group colours: **Velbus (inputs)** is teal (`#3A8C8C`), **Velbus (outputs)** is
 blue (`#4A90D9`).
@@ -1554,7 +1556,122 @@ not scoped, not built, revisit if/when that firmware capability lands.
 
 ---
 
-## 18. License and attribution
+## 18. `velbus-emulate-counter` — third-party data onto the bus, displayed natively
+
+### 18.1 The actual goal, and why VMB7IN
+
+This whole feature exists to answer one question: how does third-party
+data (MQTT, Modbus, anything Node-RED can reach) get onto the Velbus bus
+in a way VelbusLink can assign to a real OLED Counter page — not a single
+scrolling Memo-Text banner. Extensively evaluated before any code was
+written (see the "no code" evaluation phase in this session's history):
+three genuinely distinct OLED-linking mechanisms exist (Counter pages,
+Remote Analog Sensor pages, Remote Sensor/thermostat pages), and `VMB7IN`'s
+Counter mechanism was chosen deliberately — it's the only one of the three
+that's a pure one-way structured numeric broadcast, no request/response
+protocol to implement, and it reuses the exact memory/identification
+pattern already proven for `VMB4PB`/`VMB4DC`. `VMB4AN`'s Remote Analog
+Sensor mechanism was considered and correctly set aside for a first pass —
+it requires actively answering polls with formatted text, real additional
+protocol surface, not just a broadcast.
+
+### 18.2 Confirmed real build number and identification
+
+`build="2306"`, confirmed directly from a real `VMB7IN` in Stuart's own
+installation. Type byte `0x22`, identification DLC=7 (no terminator byte —
+same shape as `VMB4DC`, not `VMB4PB`).
+
+### 18.3 Confirmed memory layout (version 3, build 1424+)
+
+Applicable since the real confirmed build (2306) exceeds 1424. Per counter
+(1-4), two things stored contiguously: one combined enable+scale byte
+(`0x00E4`/`E9`/`EE`/`F3`) — `0` = disabled; bits 5-0 = base `1`-`63`
+(×100 pulses/unit); bits 7-6 = a multiplier (`×1`/`×2.5`/`×0.05`/`×0.01`)
+— followed immediately by the 32-bit cumulative counter value. A separate
+shared byte (`0x03FE`) packs all 4 counters' unit type (2 bits each:
+reserved/liter/m³/kWh). A shared auto-send-interval byte (`0x00F8`).
+
+**The two-part scale encoding is genuinely necessary, not just a
+theoretical option** — confirmed from a real configured `VMB7IN`: its four
+counters used `1000`/`2000`/`1100` pulses/kWh (all `×1` tier) and `57`
+pulses/liter (`×0.01` tier) — two different multiplier tiers in active use
+on one real module.
+
+### 18.4 Confirmed live broadcast format, and a subtlety worth remembering
+
+`0xBE` (`COMMAND_COUNTER_STATUS`): channel + base scale value packed into
+one byte (bits 1-0 = channel, bits 7-2 = the *same* base value stored in
+memory bits 5-0 — **the multiplier is never re-sent live**; VelbusLink is
+expected to already know it from having read the module's memory
+separately), a 32-bit cumulative pulse count, and a 16-bit inter-pulse
+period in ms (`0xFFFF` = overflow, meaning no recent pulse / rate
+unavailable — confirmed this is normal, expected behaviour for a
+low-flow/no-flow channel, not an error state).
+
+**Real formulas, confirmed from the protocol document and reversed for
+this emulator's own use:**
+```
+Counter value in Units = rawPulses / (base*100*multiplier)
+Power in W    = 3,600,000,000 / (periodMs * base*100*multiplier)   [kWh]
+Flow in l/h   = 3,600,000     / (periodMs * base*100*multiplier)   [liter]
+Flow in m3/h  = 3,600,000     / (periodMs * base*100*multiplier)   [m3]
+```
+**The rate constant genuinely differs 1000x between Power and Flow** — a
+real bug in this node's own first implementation used the Power constant
+universally, giving wildly wrong results for liter/m³ counters. Caught by
+the node's own round-trip test (encode known values, decode them back,
+compare) before shipping, not by inspection. The constant is keyed to each
+counter's own configured unit.
+
+### 18.5 Current value vs. accumulated value — a real design implication
+
+Confirmed explicitly: "current value is different to accumulated value."
+A real meter reports these as two independent readings (instantaneous
+rate, and a running total), not one derived from the other — the live
+packet's period-between-pulses field is how *real* hardware derives an
+instantaneous rate physically, but third-party MQTT/Modbus data won't
+naturally provide a "time between pulses." This node's input therefore
+accepts `cumulative` and `currentRate` as two independent, each-optional
+fields, doing the reverse period calculation internally so VelbusLink's
+own (forward) formula arrives back at the same number that was fed in.
+
+### 18.6 Deliberately no write-back, deliberately no `node.context()` persistence
+
+Both confirmed design decisions, not oversights:
+- **No write-back expected**: "I am NOT seeing a situation where
+  VelbusLink would write back the settings, so whatever the Node is
+  declaring, can come from its own config." Memory read/write commands
+  are still answered correctly regardless (including the write
+  acknowledgment already learned the hard way — see 17.9), but
+  configuration is entirely declared by this node's own settings, rebuilt
+  fresh into the in-memory image at every startup.
+- **No context-store persistence layer**: unlike `velbus-emulate-button-io`/
+  `-dimmer` (17.8), this node doesn't need one — its configuration already
+  persists via the flow's own JSON (no separate memory-image persistence
+  needed), and live counter values (cumulative + rate) are deliberately
+  never persisted at all: "values are flushed as we'd be looking at the
+  upstream device to provide those or the installer will have to persist
+  them." Simpler by design, not an inconsistency with the other emulators.
+
+### 18.7 Auto-send mode
+
+Three genuine real hardware modes, confirmed from the protocol document:
+fixed interval (10-255s, unconditional), on-change (5-9s minimum,
+broadcasts only when the value changes), disabled (poll-only — the module
+still answers an explicit `0xBD` Counter status request in every mode,
+confirmed this exists specifically to support this case). Plus one
+Node-RED-native addition requested explicitly: "on inject" — broadcasts
+immediately on every input with no throttling, since "data arrived" is a
+meaningful event for this use case in a way it isn't for real pulse
+hardware. The stored auto-send byte (`0x00F8`, in case VelbusLink ever
+reads it) represents "on inject" as the closest real equivalent
+(on-change, 5s) — there's no real byte value for "immediate, unthrottled,"
+and the actual broadcast behaviour is genuinely immediate regardless of
+what that stored byte says.
+
+---
+
+## 19. License and attribution
 
 MIT licensed — see `LICENSE`.
 

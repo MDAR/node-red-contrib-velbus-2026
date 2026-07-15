@@ -100,6 +100,7 @@ every single time it's been written one before)
 | `velbus-energy` | VMBPSUMNGR-20 — power supply manager: PSU load, live wattage/voltage/amperage, warranty counter, PSU alarms (V2 series only) |
 | `velbus-emulate-button-io` | **Module emulator** (new "Velbus (emulate)" category) — emulates a real VMB4PB in "I/O module" mode: 4 button inputs + 4 open-collector outputs, so VelbusLink can scan, see, and link against it without physical hardware |
 | `velbus-emulate-dimmer` | **Module emulator** — emulates a real VMB4DC, for the same training/testing purpose as above |
+| `velbus-emulate-counter` | **Module emulator** — emulates a real VMB7IN pulse-counting utility meter interface. Purpose-built for bringing third-party data (MQTT, Modbus, anything Node-RED can reach) onto the Velbus bus as a genuine module, so VelbusLink can assign it to a real OLED Counter page — not a scrolling text banner |
 
 ---
 
