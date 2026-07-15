@@ -36,6 +36,12 @@ This is a ground-up rewrite replacing the abandoned
   - Velbus_PBserver
   - Signum
 - Node.js 18+
+- **Optional, for the module emulators (`velbus-emulate-*`) only**: a
+  persistent context store configured in `settings.js` if you want their
+  memory (channel names, Linked Push Button entries) to survive a Node-RED
+  restart — e.g. `contextStorage: { default: { module: "localfilesystem" } }`.
+  Without it, the emulators still work fully, they just reset to
+  factory-fresh memory on every restart.
 
 ---
 
@@ -102,15 +108,21 @@ every single time it's been written one before)
 After installation, example flows are available via **Import → Examples → node-red-contrib-velbus-2026**
 in the Node-RED editor.
 
-### velbus-basic-relay-dimmer
-A minimal working example with:
-- Bus scan (inject to discover modules)
-- Relay toggle — Dashboard 2 switch → velbus-relay command, with state feedback
-- Dimmer slider — Dashboard 2 slider (0-100%) → velbus-dimmer-20 command, with level readout
+### velbus-scan-and-relay
+Bus scan, then on/off/toggle relay control — toggle demonstrates the
+node's own internal state tracking, not a wire command. Uses only core
+Node-RED nodes (inject, debug, comment) plus this package's own nodes, no
+other palette required.
 
-**To use:** configure the velbus-bridge node, scan the bus, open the relay and dimmer
-nodes and select your module addresses from the dropdowns, then deploy. Dashboard UI
-at `/velbus`.
+**To use:** configure the velbus-bridge node, click "Scan bus" to find
+modules, open the relay node and select a real relay address from the
+scan results, then deploy and use the On/Off/Toggle inject buttons.
+
+### velbus-dimmer-levels
+Preset-percentage dimmer control via inject buttons (0%, 25%, 50%, 100%).
+
+**To use:** configure the velbus-bridge node, open the dimmer node and
+select a real V2-series dimmer address, then deploy.
 
 ---
 

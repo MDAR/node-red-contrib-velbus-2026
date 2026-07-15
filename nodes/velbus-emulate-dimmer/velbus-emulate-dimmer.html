@@ -133,6 +133,21 @@
     <li>Program a link in VelbusLink against it, or drive it directly from the
     input below to simulate a "set level" command arriving from elsewhere.</li>
   </ol>
+  <p>
+    <strong>For memory (channel names, Linked Push Button entries) to
+    survive a Node-RED restart</strong>, a persistent context store must be
+    configured in your <code>settings.js</code> — the default context store
+    is in-memory only and does not persist. Add e.g.:
+  </p>
+  <pre>
+contextStorage: {
+    default: { module: "localfilesystem" }
+}
+  </pre>
+  <p>Without this, the node falls back silently to the default in-memory
+  context — everything still works, but the module's memory resets to
+  factory-fresh on every restart. Dim levels themselves never persist
+  regardless — real modules "start safe" at 0%.</p>
 
   <h3>Long-press dim speed</h3>
   <p>

@@ -29,6 +29,27 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.12.7 — 15/07/2026
+
+### Documentation only — persistent context store requirement was undocumented
+
+- **Prompted by a direct question**: does the README mention that
+  `settings.js` needs a persistent context store configured for the
+  emulators' memory to survive a restart? Checked — it didn't, anywhere.
+  Neither did either emulator's own help text.
+- Added to `README.md`'s Requirements section (marked optional, specific
+  to the emulators, with the fallback behaviour stated plainly: everything
+  still works without it, memory just resets to factory-fresh on restart)
+  and to both `velbus-emulate-button-io`/`velbus-emulate-dimmer`'s own
+  help text under Setup, with the actual `settings.js` snippet needed.
+- **Also found while doing this pass, unrelated but genuinely stale**: the
+  README's "Examples" section still described `velbus-basic-relay-dimmer`
+  — the Dashboard-2-dependent example replaced back in v0.10.5 with
+  `velbus-scan-and-relay`/`velbus-dimmer-levels`. Corrected to describe
+  what's actually shipped.
+
+---
+
 ## v0.12.6 — 15/07/2026
 
 ### Fixed: forced-off state was never broadcast, so VelbusLink never showed it
