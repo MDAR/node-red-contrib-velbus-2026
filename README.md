@@ -32,9 +32,9 @@ This is a ground-up rewrite replacing the abandoned
 - A Velbus TCP gateway:
   - [velbus-tcp snap](https://snapcraft.io/velbus-tcp)
   - [python-velbustcp](https://github.com/velbus/python-velbustcp)
-  - Velserv
-  - Velbus_PBserver
-  - Signum
+  - [C++ Velserv](https://forum.velbus.eu/t/how-to-install-and-run-velserv-a-velbus-tcp-gateway/15422)
+  - [PureBasic Velbus_PBserver](https://forum.velbus.eu/t/an-other-velbus-server-purebasic/5523)
+  - [Signum](https://www.velleman.eu/products/search/?q=signum&search=Search)
 - Node.js 18+
 - **Optional, for the module emulators (`velbus-emulate-*`) only**: a
   persistent context store configured in `settings.js` if you want their

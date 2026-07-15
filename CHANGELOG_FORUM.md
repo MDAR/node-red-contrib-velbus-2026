@@ -29,6 +29,19 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.12.8 — 15/07/2026
+
+### Documentation only — proper links for the alternative TCP gateway options
+
+- Contributed by Stuart: the three alternative Velbus TCP gateway options
+  in README's Requirements section (Velserv, Velbus_PBserver, Signum) were
+  plain text; now proper links to their install/info pages.
+- Fixed a Markdown syntax issue in the pasted links (a space between `]`
+  and `(` breaks link syntax, rendering as plain text rather than a
+  clickable link) before applying.
+
+---
+
 ## v0.12.7 — 15/07/2026
 
 ### Documentation only — persistent context store requirement was undocumented

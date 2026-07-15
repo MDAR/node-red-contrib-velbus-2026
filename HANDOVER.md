@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.12.7, 21 nodes, published on npm.**
+Current state at time of writing: **v0.12.8, 21 nodes, published on npm.**
 
 ---
 
