@@ -29,6 +29,38 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.13.1 — 15/07/2026
+
+### Fixed: every channel showed as disabled and locked in real VelbusLink
+
+- **Reported by Stuart against real VelbusLink**: all 4 configured channels
+  showed "Locked" in the module tree, and unlocking them via VelbusLink's
+  own UI had no effect.
+- **Root cause**: the memory image's blanket `0xFF` fill left two
+  documented status bytes at their "everything set" state — `0x0091`
+  (channel program enable/disable, `0`=enabled/`1`=disabled) and `0x0092`
+  (channel locked/unlocked, `0`=unlocked/`1`=locked) — the exact opposite
+  of a usable default. Both now explicitly cleared to `0x00` at startup.
+- **The "can't unlock" half of the report needed a second fix**: VelbusLink's
+  own unlock action almost certainly sends the dedicated `0x13`
+  (`COMMAND_CANCEL_FORCED_OFF`, reused on this module as "Unlock channel")
+  command rather than a raw memory write — confirmed from the protocol
+  document, the same command bytes already known from `VMB4PB`'s
+  Forced-off mechanism, different meaning here. Neither `0x12` (Lock) nor
+  `0x13` (Unlock) were handled at all before this fix, so even a correct
+  default wouldn't have made unlocking work. Both added — `0x12` accepts
+  the documented 24-bit time parameter (skipped if zero, permanent if
+  `0xFFFFFF`, though not genuinely timed — this node locks immediately and
+  stays locked until explicitly unlocked, since channel locking is
+  incidental to this module's actual purpose rather than something
+  needing full timed-auto-unlock fidelity).
+- Verified via the mock-RED harness: default memory read confirms both
+  bytes correctly `0x00`; locking two channels and unlocking one leaves
+  exactly the expected bitmask; a lock attempt with a zero time parameter
+  is correctly skipped, matching the protocol's own documented remark.
+
+---
+
 ## v0.13.0 — 15/07/2026
 
 ### New: `velbus-emulate-counter` — third-party data onto the bus, displayed natively

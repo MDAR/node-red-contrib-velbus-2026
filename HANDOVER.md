@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.13.0, 22 nodes, published on npm.**
+Current state at time of writing: **v0.13.1, 22 nodes, published on npm.**
 
 ---
 
@@ -1653,7 +1653,37 @@ Both confirmed design decisions, not oversights:
   upstream device to provide those or the installer will have to persist
   them." Simpler by design, not an inconsistency with the other emulators.
 
-### 18.7 Auto-send mode
+### 18.7 Channel enable/lock defaults — a real bug caught against real VelbusLink (v0.13.1)
+
+The blanket `0xFF` memory fill (deliberate, matching "unconfigured module"
+convention confirmed elsewhere) has a real failure mode for status bytes
+where `0xFF` means the *opposite* of usable: `0x0091` (channel program
+enable/disable, `0`=enabled/`1`=disabled) and `0x0092` (channel
+locked/unlocked, `0`=unlocked/`1`=locked) both defaulted to "everything
+set," which reads as "all channels disabled and locked." Confirmed against
+real VelbusLink — every configured channel showed "Locked" in the module
+tree. Both explicitly cleared to `0x00` now.
+
+**Worth remembering for any future module emulator**: a blanket `0xFF`
+fill is the right default for genuinely unconfigured data (names,
+unused memory), but every *status* byte needs checking individually for
+which bit value actually means "normal/default" — it isn't always `0`,
+but it also isn't safe to assume `0xFF` is harmless just because it's the
+fill pattern.
+
+**The fix needed a second half**: VelbusLink's own "unlock" UI action
+sends the dedicated `0x13` command (`COMMAND_CANCEL_FORCED_OFF`, reused on
+this module as "Unlock channel" — the exact same command bytes as
+`VMB4PB`'s Forced-off mechanism, confirmed a different meaning here), not
+a raw memory write. Neither `0x12` (Lock) nor `0x13` (Unlock) were handled
+at all before this fix — a correct default alone wouldn't have let
+VelbusLink's own unlock button do anything. Both added; `0x12`'s 24-bit
+time parameter is accepted (skipped if zero, matching the protocol's own
+documented remark) but not genuinely timed — locking is immediate and
+permanent until explicitly unlocked, since this is incidental to the
+module's actual purpose rather than something needing full fidelity.
+
+### 18.8 Auto-send mode
 
 Three genuine real hardware modes, confirmed from the protocol document:
 fixed interval (10-255s, unconditional), on-change (5-9s minimum,

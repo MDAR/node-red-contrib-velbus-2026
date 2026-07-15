@@ -145,6 +145,15 @@ module.exports = function(RED) {
       let unitsByte = 0x00;
       _counters.forEach(function(c, idx) { unitsByte |= (c.unit & 0x03) << (idx * 2); });
       _memory[0x03FE] = unitsByte;
+
+      // Confirmed bug (15/07/2026, found via real VelbusLink showing every
+      // channel as "Locked"): the blanket 0xFF fill above left 0x0091
+      // (channel program enable/disable, 0=enabled/1=disabled) and 0x0092
+      // (channel locked/unlocked, 0=unlocked/1=locked) at their "everything
+      // set" state, which reads as "all disabled, all locked" — the exact
+      // opposite of a usable default. Both explicitly cleared to 0x00 here.
+      _memory[0x0091] = 0x00; // all channel programs enabled
+      _memory[0x0092] = 0x00; // all channels unlocked
     })();
 
     // ── Live data → wire format conversion ──────────────────────────────
@@ -272,6 +281,30 @@ module.exports = function(RED) {
         if (body.length < 2) return;
         const chBit = body[1];
         for (let i = 0; i < 4; i++) if (chBit & (1 << i)) sendCounterStatus(i);
+        return;
+      }
+
+      if (cmd === 0x13) { // Unlock channel (COMMAND_CANCEL_FORCED_OFF, reused
+        // for channel locking on this module — confirmed 15/07/2026, same
+        // command bytes as VMB4PB's Forced-off mechanism, different meaning
+        // here). Applies across the full 8-bit channel range this module
+        // supports, not just the 4 counter-linked channels this node models.
+        if (body.length < 2) return;
+        _memory[0x0092] &= ~body[1];
+        return;
+      }
+
+      if (cmd === 0x12) { // Lock channel (COMMAND_FORCED_OFF, reused). The
+        // 24-bit time parameter (permanent if 0xFFFFFF, skipped if zero) is
+        // accepted but not genuinely timed — this node just locks
+        // immediately and stays locked until explicitly unlocked, since
+        // channel locking is incidental to this module's actual purpose
+        // (relaying third-party data) rather than something this emulator
+        // needs full timed-auto-unlock fidelity for.
+        if (body.length < 5) return;
+        const timeParam = (body[2] << 16) | (body[3] << 8) | body[4];
+        if (timeParam === 0) return; // command skipped when time is zero, per protocol
+        _memory[0x0092] |= body[1];
         return;
       }
 
