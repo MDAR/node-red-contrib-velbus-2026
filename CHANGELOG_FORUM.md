@@ -29,6 +29,42 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.12.4 — 15/07/2026
+
+### Fixed: Forced-off action byte mapping was wrong, not the logic
+
+- **Reported by Stuart against real VelbusLink**, and resolved with a real
+  VLP file (5 real `VMBELO` buttons, one Forced action each, individually
+  confirmed in order) rather than guessed at — the earlier mapping
+  (`HANDOVER.md` 17.5) had been confirmed only by sequential-byte-pattern
+  plus assumed display order, explicitly flagged there as "high
+  confidence, not certainty." That guess was wrong.
+- **Corrected mapping** (each logic block itself was already correct
+  against the guide's real definitions — this was purely a case-to-byte
+  reassignment):
+
+  | Byte | Real action | Previously mislabeled as |
+  |---|---|---|
+  | `0x01` | `0807` Forced off while closed | `0806` |
+  | `0x02` | `0808` Forced off while open | `0807` |
+  | `0x03` | `0806` Forced off | `0808` |
+  | `0x04` | `0810` Toggle forced off | `0809` |
+  | `0x05` | `0809` Cancel forced off | `0810` |
+
+  This exactly explains what Stuart observed: `0806` (which should hold a
+  sticky forced state until cancelled) behaved like the momentary `0807`;
+  `0809` (plain cancel) appeared to toggle, because the byte VelbusLink
+  actually writes for `0809` was running `0810`'s toggle logic.
+- Verified via the mock-RED harness replaying the exact confirmed VLP
+  setup (5 buttons, 5 actions, matching addresses and channels) and
+  checking each against the guide's real semantics individually: `0806`
+  stays forced after release and blocks a direct on-command; `0807`
+  releases automatically on release; `0808` behaves as the reverse
+  (forces on release, releases on press); `0809` unconditionally cancels;
+  `0810` correctly toggles the forced state on repeated presses.
+
+---
+
 ## v0.12.3 — 15/07/2026
 
 ### Fixed a real bug: relay actions fired on every event type, not just press

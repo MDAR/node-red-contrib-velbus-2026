@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.12.3, 21 nodes, published on npm.**
+Current state at time of writing: **v0.12.4, 21 nodes, published on npm.**
 
 ---
 
@@ -1279,26 +1279,30 @@ guide, which doesn't even list `VMB4PB` in its "applies to" fields at all):**
 
 | Byte | Action | Confirmation method |
 |---|---|---|
-| `0x01` | `0806` Forced off | Sequential pattern + display order, see caveat below |
-| `0x02` | `0807` Forced off while initiator closed | ″ |
-| `0x03` | `0808` Forced off while initiator open | ″ |
-| `0x04` | `0809` Cancel forced off | ″ |
-| `0x05` | `0810` Toggle forced off | ″ |
+| `0x01` | `0807` Forced off while initiator closed | **Individually confirmed 15/07/2026** — see correction below |
+| `0x02` | `0808` Forced off while initiator open | ″ |
+| `0x03` | `0806` Forced off | ″ |
+| `0x04` | `0810` Toggle forced off | ″ |
+| `0x05` | `0809` Cancel forced off | ″ |
 | `0x2E` | `0104` Momentary (follow) | Directly confirmed (Stuart stated selection) |
 | `0x2F` | `0102` Off | Directly confirmed |
 | `0x30` | `0101` On | Confirmed by elimination (only remaining General action once the other 3 were independently confirmed) |
 | `0x31` | `0103` Toggle | Directly confirmed |
 
-**Caveat on the Forced-off block (`0x01`-`0x05`):** confirmed by a clean
-sequential-byte-range pattern matching the screenshot's display order, not
-individually confirmed one-by-one the way the General block was. The
-General block's own internal storage order did *not* match its display
-order (`0x2E`=`0104`, 4th in the display list) — so "internal order
-matches display order" is not a safe general assumption, even though it
-produced a clean, internally-consistent answer here. Treat as high
-confidence, not certainty, until/unless one of the middle three
-(`0807`/`0808`) is individually confirmed the same deliberate way `0202`
-and `0214` were for `VMB4DC`.
+**Correction (15/07/2026): the original Forced-off mapping above was
+wrong**, confirmed by a real VLP file with 5 real `VMBELO` buttons, one
+Forced action each, individually selected in a known order — not the
+earlier sequential-pattern-plus-display-order guess, which this section
+itself had already flagged as "high confidence, not certainty." That
+caution turned out to be justified: the guess had `0x01`/`0x03` swapped
+with each other's real actions, and `0x04`/`0x05` swapped likewise. This
+exactly explained the real bug it caused: `0806` (meant to hold a sticky
+forced state until cancelled) was executing `0808`'s momentary logic, and
+`0809` (plain cancel) appeared to toggle because the byte VelbusLink
+actually writes for `0809` was running `0810`'s toggle logic instead. Each
+action's underlying logic was already correct against the guide's actual
+definitions — this was purely a case-to-byte reassignment, not a
+misunderstanding of what any action does. Fixed in `velbus-emulate-button-io.js`.
 
 **Confirmed from real VelbusLink UI: only these 9 actions are offered at
 all for this module's outputs** — no Forced-*on* family, no timers

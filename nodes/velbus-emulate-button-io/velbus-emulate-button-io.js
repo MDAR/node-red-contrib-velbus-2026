@@ -306,31 +306,43 @@ module.exports = function(RED) {
           else if (eventBits.released) setOutput(idx, false);
           else return; // 'long' bit alone isn't meaningful for this action
           break;
-        case 0x01: // 0806 Forced off — unconditional, but still only on the
-          // press edge (same fix as On/Off/Toggle above), not every event.
+        case 0x03: // 0806 Forced off — confirmed 15/07/2026 via individually
+          // isolated VLP testing (5 real VMBELO buttons, one action each).
+          // Corrected from an earlier pattern-guessed mapping that had this
+          // byte wrongly attached to 0808's logic. One-shot: press forces
+          // off and it STAYS forced — no release-based un-forcing at all —
+          // until 0809 or 0810 specifically cancels it.
           if (!eventBits.pressed) return;
           _forcedOff[idx] = true;
           _outputs[idx] = false;
           break;
-        case 0x02: // 0807 Forced off while initiator is closed — forced for
-          // as long as the initiator stays pressed, released when it's let go.
+        case 0x01: // 0807 Forced off while initiator is closed — confirmed.
+          // Corrected from an earlier wrong mapping (was attached to 0806's
+          // logic). Genuinely momentary: forced only as long as the
+          // initiator stays pressed, released the moment it's let go.
           if (eventBits.pressed) { _forcedOff[idx] = true; _outputs[idx] = false; }
           else if (eventBits.released) { _forcedOff[idx] = false; }
           else return;
           break;
-        case 0x03: // 0808 Forced off while initiator is open — the reverse
-          // of 0807: forced while NOT pressed, released once pressed.
+        case 0x02: // 0808 Forced off while initiator is open — confirmed.
+          // Corrected from an earlier wrong mapping (was attached to 0807's
+          // logic). The reverse of 0807: forced while NOT pressed, released
+          // the moment it IS pressed.
           if (eventBits.released) { _forcedOff[idx] = true; _outputs[idx] = false; }
           else if (eventBits.pressed) { _forcedOff[idx] = false; }
           else return;
           break;
-        case 0x04: // 0809 Cancel forced off — press edge only, same fix.
-          // Output stays wherever it was (off) until something else
-          // commands it.
+        case 0x05: // 0809 Cancel forced off — confirmed. Corrected from an
+          // earlier wrong mapping (was attached to 0810's toggle logic,
+          // which is why this looked like it was toggling rather than
+          // plainly cancelling). Unconditional: output stays wherever it
+          // was (off) until something else commands it.
           if (!eventBits.pressed) return;
           _forcedOff[idx] = false;
           break;
-        case 0x05: // 0810 Toggle forced off — press edge only, same fix.
+        case 0x04: // 0810 Toggle forced off — confirmed. Corrected from an
+          // earlier wrong mapping (was attached to 0809's plain-cancel
+          // logic).
           if (!eventBits.pressed) return;
           _forcedOff[idx] = !_forcedOff[idx];
           if (_forcedOff[idx]) _outputs[idx] = false;
