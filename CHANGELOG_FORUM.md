@@ -29,6 +29,42 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.12.3 — 15/07/2026
+
+### Fixed a real bug: relay actions fired on every event type, not just press
+
+- **Reported by Stuart against real VelbusLink, confirmed against the raw
+  log rather than assumed**: a single button gesture (press → release, or
+  a separate long-press) caused Toggle to fire multiple times — once per
+  event type reaching the emulator, when it should fire once, on the press
+  edge only. Traced precisely in the log: `SEND 0x00 [pressed]` → emulator
+  toggles on; `SEND 0x00 [released]` → toggles off again; a later
+  `SEND 0x00 [long]` → toggles a third time.
+- **Root cause**: `On`/`Off`/`Toggle` and the unconditional Forced actions
+  (`0806`/`0809`/`0810`) had no event-type filter at all in `executeAction`
+  — they fired on any matching event (press, release, *or* long) from a
+  single physical gesture. `Momentary-follow` and the closed/open Forced
+  variants (`0807`/`0808`) already correctly filtered by event type; this
+  was a gap specific to the simpler actions, not a general design flaw.
+- **Fixed**: all of `On`/`Off`/`Toggle`/`0806`/`0809`/`0810` now require
+  `eventBits.pressed` specifically — matching the guide's own wording
+  ("each time the initiator closes or is pressed"), consistent with how
+  the other actions already worked.
+- **Dimmer confirmed correct, no fix needed** — the initial report of "no
+  dimming reaction" turned out to be a test-methodology gap, not a code
+  bug: the original test log showed press immediately followed by release
+  (35ms apart), with no `long` event ever actually sent. A follow-up log
+  with genuine held long-presses confirmed the ramp, direction
+  alternation, and release-stops-the-ramp behaviour all work correctly as
+  designed — traced directly against real dimvalue sequences in the log
+  (e.g. a clean 100→31 ramp down, then a clean 31→79 ramp up on the next
+  long-press, confirming direction alternation).
+- Verified via the mock-RED harness replaying the exact real gesture
+  sequence from the log (press, long, release) and confirming exactly one
+  status broadcast for the whole gesture, not three.
+
+---
+
 ## v0.12.2 — 14/07/2026
 
 ### Configurable per-channel long-press dim speed

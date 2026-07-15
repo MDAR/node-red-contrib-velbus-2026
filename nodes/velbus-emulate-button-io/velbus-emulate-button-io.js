@@ -279,13 +279,24 @@ module.exports = function(RED) {
       const idx = ch - 9;
 
       switch (entry.action) {
-        case 0x30: // 0101 On — confirmed HANDOVER.md 17.5
+        case 0x30: // 0101 On — confirmed HANDOVER.md 17.5. Fires once per
+          // gesture, on the press edge only — confirmed bug (15/07/2026):
+          // this case had no event filter at all, so it fired on press,
+          // release, AND long from a single physical gesture. Matches the
+          // guide's own wording: "each time the initiator closes or is
+          // pressed" — the press edge, not every event type.
+          if (!eventBits.pressed) return;
           setOutput(idx, true);
           break;
-        case 0x2F: // 0102 Off — confirmed
+        case 0x2F: // 0102 Off — confirmed. Same fix as On above.
+          if (!eventBits.pressed) return;
           setOutput(idx, false);
           break;
-        case 0x31: // 0103 Toggle — confirmed
+        case 0x31: // 0103 Toggle — confirmed. Same fix — this was the case
+          // Stuart's testing caught directly: a real press+release cycle
+          // toggled twice (once per event), and a long-press toggled a
+          // third time on top of that.
+          if (!eventBits.pressed) return;
           setOutput(idx, !_outputs[idx]);
           break;
         case 0x2E: // 0104 Momentary (follow) — confirmed. Genuinely tracks
@@ -295,7 +306,9 @@ module.exports = function(RED) {
           else if (eventBits.released) setOutput(idx, false);
           else return; // 'long' bit alone isn't meaningful for this action
           break;
-        case 0x01: // 0806 Forced off — unconditional, fires on any event
+        case 0x01: // 0806 Forced off — unconditional, but still only on the
+          // press edge (same fix as On/Off/Toggle above), not every event.
+          if (!eventBits.pressed) return;
           _forcedOff[idx] = true;
           _outputs[idx] = false;
           break;
@@ -311,11 +324,14 @@ module.exports = function(RED) {
           else if (eventBits.pressed) { _forcedOff[idx] = false; }
           else return;
           break;
-        case 0x04: // 0809 Cancel forced off — unconditional release, output
-          // stays wherever it was (off) until something else commands it.
+        case 0x04: // 0809 Cancel forced off — press edge only, same fix.
+          // Output stays wherever it was (off) until something else
+          // commands it.
+          if (!eventBits.pressed) return;
           _forcedOff[idx] = false;
           break;
-        case 0x05: // 0810 Toggle forced off
+        case 0x05: // 0810 Toggle forced off — press edge only, same fix.
+          if (!eventBits.pressed) return;
           _forcedOff[idx] = !_forcedOff[idx];
           if (_forcedOff[idx]) _outputs[idx] = false;
           break;

@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.12.2, 21 nodes, published on npm.**
+Current state at time of writing: **v0.12.3, 21 nodes, published on npm.**
 
 ---
 
@@ -1422,6 +1422,14 @@ details:
     code path uses — the Action-assignment engine *and* direct `0x01`/
     `0x02` commands alike — so a forced channel cannot be turned back on
     by anything except the specific cancel/toggle-forced actions.
+    **Corrected 15/07/2026** (confirmed against a real VelbusLink log, not
+    assumed): `On`/`Off`/`Toggle` and the unconditional Forced actions
+    originally had no event-type filter at all, firing on press, release,
+    *and* long from a single gesture — a real, reproducible bug traced
+    precisely in the log (Toggle firing three times for one physical
+    press-hold-release). All now require the press edge specifically,
+    matching `Momentary-follow` and the closed/open Forced variants, which
+    already filtered correctly.
   - `VMB4DC`'s `0202` implements the real gesture: press waits, a
     long-press starts a genuine `setInterval`-driven continuous ramp
     (fixed 200ms tick, step size computed per-channel from a configurable
