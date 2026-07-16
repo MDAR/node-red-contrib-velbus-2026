@@ -44,6 +44,61 @@ const BUILD_YEAR = 0x23, BUILD_WEEK = 0x06; // real build 2306, confirmed from a
 const MULTIPLIERS = [1, 2.5, 0.05, 0.01]; // indexed by bits 7-6 of the scale byte
 const UNIT_NAMES = ['reserved', 'liter', 'm3', 'kWh'];
 
+// Real, confirmed factory-default VMB7IN memory image — the entire 1024
+// bytes of a genuine VMB7IN's memory, exactly as VelbusLink itself expects
+// to find on a real, unconfigured-beyond-basics module. Used as the actual
+// starting template for this emulator's memory (overlaid with this node's
+// own config below), rather than a blanket 0xFF fill.
+//
+// Found necessary (16/07/2026), not a nice-to-have: leaving unaddressed
+// fields at 0xFF (default channel 5-8 names, multi-function/dual-function/
+// alarm-clock configuration, a device-model string, and more — dozens of
+// individually undocumented-by-purpose fields) caused VelbusLink to
+// genuinely attempt writing them back on every sync, since a real module
+// would never have those fields blank. Confirmed via a full trace log:
+// every single write VelbusLink attempted matched byte-for-byte what a
+// real reference VMB7IN already had — VelbusLink wasn't changing
+// anything, just completing a picture this emulator left incomplete.
+// Copying the real reference memory wholesale, rather than reverse-
+// engineering each individual field's purpose, avoids an entire class of
+// "VelbusLink wants to write X" issues at once and is the same lesson as
+// the reaction-time bug (17.7/18.7): partial understanding of a real
+// module's memory, filled in with 0xFF for anything unexplained, is a
+// reliable source of subtle bugs a real reference dump avoids entirely.
+const FACTORY_DEFAULT_MEMORY_HEX =
+  '54657374FFFFFFFFFFFFFFFFFFFFFFFF5761746572FFFFFFFFFFFFFFFFFFFFFF' +
+  '4E6974726F67656EFFFFFFFFFFFFFFFF434F32FFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  '5075736820627574746F6E2035FFFFFF5075736820627574746F6E2036FFFFFF' +
+  '5075736820627574746F6E2037FFFFFF5669727475616C20627574746F6E2031' +
+  '05050505FFFFFFFFFF002000FFFFFFFFFF00007F000000000000000001010202' +
+  '040408081010202040408080FF00E0401724010101010133FFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFE9010101E91724010101010133FFFFFFFFFFFFFFFFFFFFFFFFFFE9' +
+  '010101E90AFFFFFFFFD2FFFFFFFFCDFFFFFFFFD2FFFFFFFFFFFFFFFFFF509A9C' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFF0000FFFF564D4237494EFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' +
+  'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF18EE18EEC8DBC8DB18EE18EE0F0F6700';
+
 // Given a desired pulses-per-unit value, find the closest achievable
 // (base, multiplierIndex) encoding — not every integer is exactly
 // representable, confirmed from a real installation using two different
@@ -126,13 +181,25 @@ module.exports = function(RED) {
 
     // ── Memory image — rebuilt fresh from config every startup, no
     // context()-based persistence (see the file-level comment for why).
-    const _memory = new Uint8Array(1024).fill(0xFF);
+    // Starts from the real factory-default template (FACTORY_DEFAULT_
+    // MEMORY_HEX above), not a blanket 0xFF fill — see that constant's
+    // comment for why this matters.
+    const _memory = new Uint8Array(1024);
+    for (let i = 0; i < 1024; i++) {
+      _memory[i] = parseInt(FACTORY_DEFAULT_MEMORY_HEX.substr(i * 2, 2), 16);
+    }
 
     function writeName(base, name) {
       for (let i = 0; i < 16; i++) _memory[base + i] = i < name.length ? name.charCodeAt(i) : 0xFF;
     }
 
     (function initMemory() {
+      // Overlay this node's own config on top of the factory-default
+      // template — only the fields that should genuinely be config-driven.
+      // Everything else (channels 5-8 default names, multi-function/
+      // dual-function/alarm-clock config, the device-model string, and
+      // more) is left exactly as the real reference module had it, since
+      // none of that needs to vary per this node's configuration.
       _counters.forEach(function(c, idx) {
         writeName(idx * 0x10, c.name); // channel name block, 0x0000+
         const scaleAddr = 0x00E4 + idx * 5;
@@ -140,40 +207,33 @@ module.exports = function(RED) {
         // cumulative left at 0xFFFFFFFF (blank) until real data arrives —
         // matches a genuinely fresh/unconfigured module, confirmed from a
         // real VLP showing exactly this blank state before data is fed in.
+        _memory[0x00E5 + idx * 5] = 0xFF;
+        _memory[0x00E6 + idx * 5] = 0xFF;
+        _memory[0x00E7 + idx * 5] = 0xFF;
+        _memory[0x00E8 + idx * 5] = 0xFF;
       });
       _memory[0x00F8] = _autoSendByte;
       let unitsByte = 0x00;
       _counters.forEach(function(c, idx) { unitsByte |= (c.unit & 0x03) << (idx * 2); });
       _memory[0x03FE] = unitsByte;
 
-      // Confirmed bug (15/07/2026, found via real VelbusLink showing every
-      // channel as "Locked"): the blanket 0xFF fill above left 0x0091
-      // (channel program enable/disable, 0=enabled/1=disabled) and 0x0092
-      // (channel locked/unlocked, 0=unlocked/1=locked) at their "everything
-      // set" state, which reads as "all disabled, all locked" — the exact
-      // opposite of a usable default. Both explicitly cleared to 0x00 here.
+      // Channel program enable (0x0091) and locked (0x0092) — confirmed
+      // bug (15/07/2026, real VelbusLink showed every channel "Locked"),
+      // now redundant with the template (which already has both correctly
+      // at 0x00) but kept explicit in case a future config ever needs
+      // per-channel control over either.
       _memory[0x0091] = 0x00; // all channel programs enabled
       _memory[0x0092] = 0x00; // all channels unlocked
 
-      // Confirmed a SEPARATE, genuinely different bug (15/07/2026) via a
-      // direct byte-level diff against a real reference VMB7IN Stuart
-      // configured and confirmed correct: 0x0080-0x0087 (Channel 1-8
-      // reaction time) is documented with an explicit special value —
-      // "H'FF' Channel disabled" — completely different from the 0x0091/
-      // 0x0092 fields above. The blanket 0xFF fill left every channel's
-      // reaction time at exactly that "disabled" value, including the 4
-      // configured/enabled channels — this was the actual remaining cause
-      // of channels showing Disabled even after the 0x0091/0x0092 fix.
-      // The real reference module uses 0x05 (0.065s, the fastest/most
-      // sensitive valid reaction time) for its 4 active channels — matched
-      // here exactly rather than picking an arbitrary different valid value.
-      _counters.forEach(function(c, idx) {
-        if (c.enabled) _memory[0x0080 + idx] = 0x05;
-        // Channels genuinely left disabled correctly keep 0xFF here — that
-        // really is what "disabled" is supposed to look like for an unused
-        // channel, confirmed from the same reference file (channels 5-8,
-        // which Stuart isn't using, show 0xFF here too).
-      });
+      // Reaction time (0x0080-0x0087) — confirmed separate bug (15/07/2026):
+      // "0xFF" specifically means "Channel disabled" for this field. The
+      // template already has 0x05 for its own 4 configured channels; this
+      // overlay makes it correctly follow THIS node's actual enabled
+      // channels instead, in case config differs from the reference file
+      // (fewer/more/different channels enabled).
+      for (let idx = 0; idx < 8; idx++) {
+        _memory[0x0080 + idx] = (idx < 4 && _counters[idx].enabled) ? 0x05 : 0xFF;
+      }
     })();
 
     // ── Live data → wire format conversion ──────────────────────────────

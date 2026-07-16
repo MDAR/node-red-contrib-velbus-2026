@@ -6,7 +6,7 @@ you're a new contributor, a new maintainer, or an AI assistant starting a fresh 
 with no memory of previous work — this document should be sufficient on its own, together
 with the source code in this repository, to continue development competently.
 
-Current state at time of writing: **v0.13.2, 22 nodes, published on npm.**
+Current state at time of writing: **v0.13.3, 22 nodes, published on npm.**
 
 ---
 
@@ -1709,6 +1709,36 @@ byte-level diff against a real reference file, the way this fix was found,
 is the reliable way to resolve anything from that remaining set if it
 turns out to matter in practice — worth reaching for that method directly
 next time, rather than another documentation-only pass.
+
+**That advice was acted on immediately, and it resolved the whole class of
+issues at once (v0.13.3).** A full trace log of VelbusLink actually
+attempting a write confirmed something important: every byte it wrote
+matched exactly what the real reference module already had — channel 5-7
+default names, a "Virtual button 1" entry, multi-function/dual-function/
+alarm-clock configuration, a device-model string, and a redundant
+re-confirmation of the units byte. VelbusLink wasn't changing anything; it
+was completing a picture the blanket `0xFF` fill had left incomplete,
+exactly the reaction-time bug's pattern, just far more fields at once.
+
+**Fixed at the root rather than field-by-field**: `FACTORY_DEFAULT_MEMORY_HEX`
+is the actual real reference `VMB7IN`'s complete 1024-byte memory, embedded
+directly in the node's source, used as the literal starting point instead
+of a blanket fill — then this node's own config overlays only what should
+genuinely vary (names, scales, units, auto-send, reaction times, lock/
+enable). Confirmed: this emulator's own memory now matches the real
+reference byte-for-byte except one legitimately expected difference (the
+auto-send byte, genuinely config-driven, correctly differs when configured
+differently) — down from 143 original differences, to 139 after the first
+two fixes, to 1 now.
+
+**The general lesson, worth carrying into any future module emulator**:
+when a real reference dump of the exact target module is available, use it
+as the literal starting template rather than reconstructing a "default"
+state field-by-field from documentation. Every field this emulator didn't
+already need to be config-driven turned into a potential source of
+individually-discovered bugs; copying the real memory wholesale converts
+an open-ended set of "what else did I miss" into a closed, already-solved
+problem.
 
 ### 18.8 Auto-send mode
 

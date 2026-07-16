@@ -29,6 +29,54 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.13.3 — 16/07/2026
+
+### Fixed at the root: VelbusLink kept "wanting to write" — entire class of issues resolved at once
+
+- **Reported by Stuart**: VelbusLink allowed a write to the emulated
+  `VMB7IN` — surprising, since "no write-back expected" had been the
+  working assumption. Confirmed this was expected, not a bug: the
+  emulator's memory writes were always genuinely functional (matching the
+  same acknowledgment pattern already proven on the button/dimmer
+  emulators), "no write-back expected" was about the *intended workflow*
+  not a technical block.
+- **The actual question — what was VelbusLink writing, and why** — resolved
+  with a full trace log, not more guessing. Every single write VelbusLink
+  attempted matched byte-for-byte what a real reference `VMB7IN` (supplied
+  by Stuart, confirmed correct in his own VelbusLink) already had: default
+  names for the unused channels 5-7 ("Push button 5/6/7"), a "Virtual
+  button 1" entry, dozens of multi-function/dual-function/alarm-clock
+  configuration bytes, a device-model string, and a re-confirmation of the
+  units byte this emulator already computed correctly. VelbusLink wasn't
+  changing anything — it was completing a picture this emulator's blanket
+  `0xFF` fill had left incomplete, exactly the same underlying pattern as
+  the reaction-time bug fixed in v0.13.2, just a much larger set of fields.
+- **Fixed at the root rather than field-by-field**: the emulator's memory
+  now starts from the *actual* real reference `VMB7IN`'s complete 1024-byte
+  memory image (embedded directly, confirmed byte-for-byte real, not
+  reconstructed from documentation) instead of a blanket `0xFF` fill —
+  then overlays only what should genuinely be config-driven (the 4 channel
+  names, counter scales, units, auto-send interval, reaction times, lock/
+  enable state). Everything else now matches real factory-default hardware
+  exactly, because it *is* real factory-default hardware data, not a
+  guess at it.
+- This resolves the whole class of "VelbusLink wants to write X" issues at
+  once, rather than requiring another individually-diagnosed field the
+  next time a different one turns up — the same lesson as v0.13.2's
+  reaction-time fix, now applied comprehensively instead of one field at a
+  time.
+- Verified: this emulator's own memory dump now matches the real reference
+  file byte-for-byte except for one legitimately expected difference (the
+  auto-send-interval byte, which correctly differs because it's genuinely
+  config-driven and Stuart's reference module happened to use a different
+  setting for his own testing) — down from 143 differences originally,
+  to 139 after v0.13.2, to 1 now, and that one isn't a bug. Also verified
+  a *different* configuration correctly overlays without leaving stale
+  reference data behind — new channel names and scales apply correctly,
+  unconfigured channels correctly keep the real factory-default names.
+
+---
+
 ## v0.13.2 — 15/07/2026
 
 ### Fixed: the 4 configured channels still showed as Disabled after v0.13.1
