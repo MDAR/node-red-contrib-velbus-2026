@@ -1,0 +1,328 @@
+[
+    {
+        "id": "38e1e8e710de58cf",
+        "type": "velbus-emulate-button-io",
+        "z": "5f2cf5800b416cce",
+        "name": "VMB4PB I/O Mode Emulator",
+        "bridge": "",
+        "address": "0x60",
+        "moduleName": "Test VMB4PB",
+        "serial": "7E94",
+        "x": 570,
+        "y": 280,
+        "wires": [
+            [
+                "62c25837a3be1da7",
+                "82fc534da8f3c37d"
+            ]
+        ]
+    },
+    {
+        "id": "b45dac942a922b64",
+        "type": "junction",
+        "z": "5f2cf5800b416cce",
+        "x": 520,
+        "y": 460,
+        "wires": [
+            [
+                "38e1e8e710de58cf"
+            ]
+        ]
+    },
+    {
+        "id": "bd4921bdaad43e87",
+        "type": "junction",
+        "z": "5f2cf5800b416cce",
+        "x": 480,
+        "y": 200,
+        "wires": [
+            [
+                "38e1e8e710de58cf"
+            ]
+        ]
+    },
+    {
+        "id": "62c25837a3be1da7",
+        "type": "debug",
+        "z": "5f2cf5800b416cce",
+        "name": "4PB Emulator OP9",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "payload.outputs[0]",
+        "statusType": "msg",
+        "x": 890,
+        "y": 160,
+        "wires": []
+    },
+    {
+        "id": "82fc534da8f3c37d",
+        "type": "debug",
+        "z": "5f2cf5800b416cce",
+        "name": "4PB Emulator OP9 force",
+        "active": true,
+        "tosidebar": false,
+        "console": false,
+        "tostatus": true,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "payload.forced[0]",
+        "statusType": "msg",
+        "x": 910,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "3f4d195b9b6590b3",
+        "type": "inject",
+        "z": "5f2cf5800b416cce",
+        "name": "Ch9 ON",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{ \"channel\": 9, \"cmd\": \"on\" }",
+        "payloadType": "json",
+        "x": 320,
+        "y": 340,
+        "wires": [
+            [
+                "b45dac942a922b64"
+            ]
+        ]
+    },
+    {
+        "id": "30f4a321dd38a0f7",
+        "type": "inject",
+        "z": "5f2cf5800b416cce",
+        "name": "Ch9 OFF",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{ \"channel\": 9, \"cmd\": \"off\" }",
+        "payloadType": "json",
+        "x": 320,
+        "y": 380,
+        "wires": [
+            [
+                "b45dac942a922b64"
+            ]
+        ]
+    },
+    {
+        "id": "1f4a047e1674a23c",
+        "type": "inject",
+        "z": "5f2cf5800b416cce",
+        "name": "Ch9 Toggle",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{ \"channel\": 9, \"cmd\": \"toggle\" }",
+        "payloadType": "json",
+        "x": 330,
+        "y": 420,
+        "wires": [
+            [
+                "b45dac942a922b64"
+            ]
+        ]
+    },
+    {
+        "id": "d2a0692fb8d22e86",
+        "type": "inject",
+        "z": "5f2cf5800b416cce",
+        "name": "Ch9 Force OFF",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{ \"channel\": 9, \"cmd\": \"force_off\" }",
+        "payloadType": "json",
+        "x": 340,
+        "y": 480,
+        "wires": [
+            [
+                "b45dac942a922b64"
+            ]
+        ]
+    },
+    {
+        "id": "93fb560bf6a591f8",
+        "type": "inject",
+        "z": "5f2cf5800b416cce",
+        "name": "Ch9 Force OFF Toggle",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{ \"channel\": 9, \"cmd\": \"force_toggle\" }",
+        "payloadType": "json",
+        "x": 360,
+        "y": 520,
+        "wires": [
+            [
+                "b45dac942a922b64"
+            ]
+        ]
+    },
+    {
+        "id": "9b04fb6bb46c0fdb",
+        "type": "inject",
+        "z": "5f2cf5800b416cce",
+        "name": "Ch9 Force Cancel",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{ \"channel\": 9, \"cmd\": \"force_cancel\" }",
+        "payloadType": "json",
+        "x": 350,
+        "y": 560,
+        "wires": [
+            [
+                "b45dac942a922b64"
+            ]
+        ]
+    },
+    {
+        "id": "fe8ca8fc55577df5",
+        "type": "inject",
+        "z": "5f2cf5800b416cce",
+        "name": "Ch1 press",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"channel\":1, \"event\": \"press\"}",
+        "payloadType": "json",
+        "x": 340,
+        "y": 180,
+        "wires": [
+            [
+                "bd4921bdaad43e87"
+            ]
+        ]
+    },
+    {
+        "id": "d23825822cd8ca71",
+        "type": "inject",
+        "z": "5f2cf5800b416cce",
+        "name": "Ch1 Release",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"channel\":1, \"event\": \"release\"}",
+        "payloadType": "json",
+        "x": 350,
+        "y": 260,
+        "wires": [
+            [
+                "bd4921bdaad43e87"
+            ]
+        ]
+    },
+    {
+        "id": "fb0a2215566d3d94",
+        "type": "inject",
+        "z": "5f2cf5800b416cce",
+        "name": "Ch1 long",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"channel\":1, \"event\": \"long\"}",
+        "payloadType": "json",
+        "x": 340,
+        "y": 220,
+        "wires": [
+            [
+                "bd4921bdaad43e87"
+            ]
+        ]
+    },
+    {
+        "id": "4a7ff9374f5389e4",
+        "type": "inject",
+        "z": "5f2cf5800b416cce",
+        "name": "Ch1 press & release",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"channel\":1}",
+        "payloadType": "json",
+        "x": 370,
+        "y": 140,
+        "wires": [
+            [
+                "bd4921bdaad43e87"
+            ]
+        ]
+    }
+]
