@@ -1,93 +1,111 @@
 [
-    {
-        "id": "fn-counter-test",
-        "type": "function",
-        "z": "tab-counter-injector",
-        "name": "Generate test readings",
-        "func": "// Plausible-looking test data for the 4 reference channels — matches\n// the real config confirmed earlier: Test(kWh)/Water(liter)/Nitrogen(m3)/\n// CO2(liter). Edit CHANNELS below if your own channel setup differs.\nconst CHANNELS = [\n  { channel: 1, name: 'Test (kWh)',    rateMin: 300, rateMax: 2800, cumStep: [0.001, 0.02] },\n  { channel: 2, name: 'Water (liter)', rateMin: 0,   rateMax: 40,   cumStep: [0, 0.3] },\n  { channel: 3, name: 'Nitrogen (m3)', rateMin: 0,   rateMax: 3,    cumStep: [0, 0.05] },\n  { channel: 4, name: 'CO2 (liter)',   rateMin: 0,   rateMax: 15,   cumStep: [0, 0.15] },\n];\n\nlet state = context.get('counterState');\nif (!state) {\n    state = {};\n    CHANNELS.forEach(c => { state[c.channel] = 0; });\n}\n\nconst outputs = CHANNELS.map(function(c) {\n    const rate = c.rateMin + Math.random() * (c.rateMax - c.rateMin);\n    const step = c.cumStep[0] + Math.random() * (c.cumStep[1] - c.cumStep[0]);\n    state[c.channel] += step;\n    return {\n        payload: {\n            channel: c.channel,\n            cumulative: Math.round(state[c.channel] * 1000) / 1000,\n            currentRate: Math.round(rate * 10) / 10,\n        },\n        topic: c.name,\n    };\n});\n\ncontext.set('counterState', state);\nreturn [outputs];",
-        "outputs": 1,
-        "timeout": 0,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 400,
-        "y": 140,
-        "wires": [
-            [
-                "debug-counter-test",
-                "d19d2ee37838eb58"
-            ]
-        ]
-    },
-    {
-        "id": "inject-counter-test",
-        "type": "inject",
-        "z": "tab-counter-injector",
-        "name": "Every 3s",
-        "props": [
-            {
-                "p": "payload"
-            }
-        ],
-        "repeat": "3",
-        "crontab": "",
-        "once": true,
-        "onceDelay": 1,
-        "topic": "",
-        "payload": "",
-        "payloadType": "date",
-        "x": 160,
-        "y": 140,
-        "wires": [
-            [
-                "fn-counter-test"
-            ]
-        ]
-    },
-    {
-        "id": "debug-counter-test",
-        "type": "debug",
-        "z": "tab-counter-injector",
-        "name": "Generated readings",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": true,
-        "complete": "payload",
-        "targetType": "msg",
-        "statusVal": "payload.currentRate",
-        "statusType": "msg",
-        "x": 640,
-        "y": 140,
-        "wires": []
-    },
-    {
-        "id": "d19d2ee37838eb58",
-        "type": "velbus-emulate-counter",
-        "z": "tab-counter-injector",
-        "name": "Counter",
-        "bridge": "",
-        "address": "50",
-        "moduleName": "Test Count",
-        "serial": "9A9C",
-        "counter1PulsesPerUnit": 1000,
-        "counter1Unit": "3",
-        "counter1Name": "Test",
-        "counter2PulsesPerUnit": "18",
-        "counter2Unit": "1",
-        "counter2Name": "Water",
-        "counter3PulsesPerUnit": "13",
-        "counter3Unit": "2",
-        "counter3Name": "Nitrogen",
-        "counter4PulsesPerUnit": "18",
-        "counter4Unit": "1",
-        "counter4Name": "CO2",
-        "autoSendMode": "oninject",
-        "autoSendSeconds": 5,
-        "x": 620,
-        "y": 240,
-        "wires": []
-    }
-    }
+  {
+    "id": "tab-counter-injector",
+    "type": "tab",
+    "label": "Counter emulator \u2014 random test data",
+    "disabled": false,
+    "info": "Generates plausible-looking live data for velbus-emulate-counter's 4 reference channels (Test/kWh, Water/liter, Nitrogen/m3, CO2/liter) every 3 seconds, so real OLED panel behaviour can be watched updating live without a real utility meter.\n\nBefore using:\n1. Edit the 'Velbus Gateway' config node with your gateway's host/port.\n2. Open the Counter node and confirm its address (0x50) is free on your bus, and its 4 channels match your own OLED Counter page assignments.\n3. Deploy \u2014 the inject node fires every 3 seconds automatically.\n\nCumulative values genuinely accumulate over time (persisted in flow context, resets on redeploy). Current rate is randomised within a plausible range each cycle, not derived from the cumulative change, so it won't reconcile against real physics \u2014 it's there to give moving numbers on a real OLED, not a physically accurate simulation."
+  },
+  {
+    "id": "bridge-counter-injector",
+    "type": "velbus-bridge",
+    "name": "Velbus Gateway",
+    "host": "127.0.0.1",
+    "port": "6000",
+    "useTLS": false,
+    "useAuth": false,
+    "authKey": "",
+    "certPath": "",
+    "keyPath": ""
+  },
+  {
+    "id": "fn-counter-test",
+    "type": "function",
+    "z": "tab-counter-injector",
+    "name": "Generate test readings",
+    "func": "// Plausible-looking test data for the 4 reference channels \u2014 matches\n// the real config confirmed earlier: Test(kWh)/Water(liter)/Nitrogen(m3)/\n// CO2(liter). Edit CHANNELS below if your own channel setup differs.\nconst CHANNELS = [\n  { channel: 1, name: 'Test (kWh)',    rateMin: 300, rateMax: 2800, cumStep: [0.001, 0.02] },\n  { channel: 2, name: 'Water (liter)', rateMin: 0,   rateMax: 40,   cumStep: [0, 0.3] },\n  { channel: 3, name: 'Nitrogen (m3)', rateMin: 0,   rateMax: 3,    cumStep: [0, 0.05] },\n  { channel: 4, name: 'CO2 (liter)',   rateMin: 0,   rateMax: 15,   cumStep: [0, 0.15] },\n];\n\nlet state = context.get('counterState');\nif (!state) {\n    state = {};\n    CHANNELS.forEach(c => { state[c.channel] = 0; });\n}\n\nconst outputs = CHANNELS.map(function(c) {\n    const rate = c.rateMin + Math.random() * (c.rateMax - c.rateMin);\n    const step = c.cumStep[0] + Math.random() * (c.cumStep[1] - c.cumStep[0]);\n    state[c.channel] += step;\n    return {\n        payload: {\n            channel: c.channel,\n            cumulative: Math.round(state[c.channel] * 1000) / 1000,\n            currentRate: Math.round(rate * 10) / 10,\n        },\n        topic: c.name,\n    };\n});\n\ncontext.set('counterState', state);\nreturn [outputs];",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 400,
+    "y": 140,
+    "wires": [
+      [
+        "debug-counter-test",
+        "d19d2ee37838eb58"
+      ]
+    ]
+  },
+  {
+    "id": "inject-counter-test",
+    "type": "inject",
+    "z": "tab-counter-injector",
+    "name": "Every 3s",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "3",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 160,
+    "y": 140,
+    "wires": [
+      [
+        "fn-counter-test"
+      ]
+    ]
+  },
+  {
+    "id": "debug-counter-test",
+    "type": "debug",
+    "z": "tab-counter-injector",
+    "name": "Generated readings",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": true,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "payload.currentRate",
+    "statusType": "msg",
+    "x": 640,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "d19d2ee37838eb58",
+    "type": "velbus-emulate-counter",
+    "z": "tab-counter-injector",
+    "name": "Counter",
+    "bridge": "bridge-counter-injector",
+    "address": "50",
+    "moduleName": "Test Count",
+    "serial": "9A9C",
+    "counter1PulsesPerUnit": 1000,
+    "counter1Unit": "3",
+    "counter1Name": "Test",
+    "counter2PulsesPerUnit": "18",
+    "counter2Unit": "1",
+    "counter2Name": "Water",
+    "counter3PulsesPerUnit": "13",
+    "counter3Unit": "2",
+    "counter3Name": "Nitrogen",
+    "counter4PulsesPerUnit": "18",
+    "counter4Unit": "1",
+    "counter4Name": "CO2",
+    "autoSendMode": "oninject",
+    "autoSendSeconds": 5,
+    "x": 620,
+    "y": 240,
+    "wires": []
+  }
 ]

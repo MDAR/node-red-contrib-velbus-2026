@@ -29,6 +29,37 @@ separate duplicate-table bugs took to fully resolve.
 
 ---
 
+## v0.13.4 — 16/07/2026
+
+### 3 new examples added, 1 fixed, all 5 documented
+
+- **Contributed by Stuart**: `velbus-scan-and-debug`, `velbus-VMB4PB-emulator`,
+  and `velbus-counter-emulator-random-values` — real, working examples
+  built from actual testing sessions.
+- **Fixed before shipping**: `velbus-counter-emulator-random-values.json`
+  had a genuine JSON syntax error (a stray extra closing brace) that would
+  have failed to import into Node-RED at all — caught by validating every
+  example file rather than assuming a contributed file was import-ready.
+- **Fixed a second, more structural issue in all three new examples**: each
+  referenced a tab ID that wasn't defined anywhere in its own file, and
+  each had an empty `bridge` reference — both expected artifacts of
+  exporting "selected nodes" from an existing working flow rather than a
+  standalone tab, but meaning none of the three were actually self-
+  contained on import. Added a proper `tab` node (with setup instructions,
+  matching the existing two examples' convention) and a `velbus-bridge`
+  config node to each.
+- Confirmed `junction` (used in the VMB4PB emulator example to tidy wire
+  routing) was introduced in Node-RED 3.0 itself, not a later minor
+  version — no README requirement change needed.
+- All 5 examples now documented in README's Examples section with
+  consistent "what it does" / "to use" descriptions.
+- Verified: all 5 files parse as valid JSON, every wire and bridge
+  reference resolves to a real node, and only core Node-RED nodes plus
+  this package's own nodes are used throughout (no third-party
+  dependencies, matching the Flow Library's own example requirements).
+
+---
+
 ## v0.13.3 — 16/07/2026
 
 ### Fixed at the root: VelbusLink kept "wanting to write" — entire class of issues resolved at once

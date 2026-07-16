@@ -125,6 +125,35 @@ Preset-percentage dimmer control via inject buttons (0%, 25%, 50%, 100%).
 **To use:** configure the velbus-bridge node, open the dimmer node and
 select a real V2-series dimmer address, then deploy.
 
+### velbus-scan-and-debug
+A minimal bus scan with two debug outputs — the full raw scan result, and
+a status-line view showing just each discovered module as it's found.
+
+**To use:** configure the velbus-bridge node, deploy, then click "Scan".
+
+### velbus-VMB4PB-emulator
+Exercises `velbus-emulate-button-io`'s full input contract: simulated
+button events (press/release/long, individually or combined) and direct
+output commands (on/off/toggle/force_off/force_toggle/force_cancel).
+
+**To use:** configure the velbus-bridge node, confirm the emulator's
+address (0x60) is free on your bus, deploy, then try the inject buttons —
+watch the debug sidebar for the resulting output and forced-state changes.
+
+### velbus-counter-emulator-random-values
+Generates plausible-looking live data for `velbus-emulate-counter`'s 4
+reference channels (electricity/kWh, water/liter, gas/m³, a second
+liter channel) every 3 seconds — useful for watching real OLED Counter
+page behaviour update live without a real utility meter connected.
+
+**To use:** configure the velbus-bridge node, confirm the emulator's
+address (0x50) and channel configuration match your own setup, then
+deploy — the inject node fires automatically every 3 seconds. Cumulative
+values genuinely accumulate over time (reset on redeploy); the current
+rate is randomised within a plausible range each cycle rather than
+derived from the cumulative change, so treat it as "moving numbers for a
+real display," not a physically accurate simulation.
+
 ---
 
 ## Quick start

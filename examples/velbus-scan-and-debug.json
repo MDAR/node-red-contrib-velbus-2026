@@ -1,80 +1,99 @@
 [
-    {
-        "id": "1e03e887dbbe9fa9",
-        "type": "velbus-scan",
-        "z": "5f2cf5800b416cce",
-        "name": "",
-        "bridge": "",
-        "rtrDelay": 75,
-        "collectTime": 8000,
-        "x": 650,
-        "y": 60,
-        "wires": [
-            [
-                "272afe3a2903b2ce"
-            ],
-            [
-                "683d6cd1c8bf637e"
-            ]
-        ]
-    },
-    {
-        "id": "6467b1256f6ad42b",
-        "type": "inject",
-        "z": "5f2cf5800b416cce",
-        "name": "Scan",
-        "props": [
-            {
-                "p": "payload"
-            }
-        ],
-        "repeat": "",
-        "crontab": "",
-        "once": false,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payload": "true",
-        "payloadType": "bool",
-        "x": 310,
-        "y": 60,
-        "wires": [
-            [
-                "1e03e887dbbe9fa9"
-            ]
-        ]
-    },
-    {
-        "id": "272afe3a2903b2ce",
-        "type": "debug",
-        "z": "5f2cf5800b416cce",
-        "name": "Velbus Scan results",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "true",
-        "targetType": "full",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 910,
-        "y": 40,
-        "wires": []
-    },
-    {
-        "id": "683d6cd1c8bf637e",
-        "type": "debug",
-        "z": "5f2cf5800b416cce",
-        "name": "Velbus modules found",
-        "active": true,
-        "tosidebar": false,
-        "console": false,
-        "tostatus": true,
-        "complete": "true",
-        "targetType": "full",
-        "statusVal": "payload.module",
-        "statusType": "msg",
-        "x": 920,
-        "y": 80,
-        "wires": []
-    }
+  {
+    "id": "5f2cf5800b416cce",
+    "type": "tab",
+    "label": "Velbus: Scan with full debug output",
+    "disabled": false,
+    "info": "A minimal bus scan with two debug outputs \u2014 the full raw scan result, and a status-line view showing just each discovered module as it's found (useful for watching a scan progress in the debug sidebar's status line rather than scrolling the full payload).\n\nBefore using:\n1. Edit the 'Velbus Gateway' config node with your gateway's host/port.\n2. Deploy, then click 'Scan'."
+  },
+  {
+    "id": "bridge-scan-and-debug",
+    "type": "velbus-bridge",
+    "name": "Velbus Gateway",
+    "host": "127.0.0.1",
+    "port": "6000",
+    "useTLS": false,
+    "useAuth": false,
+    "authKey": "",
+    "certPath": "",
+    "keyPath": ""
+  },
+  {
+    "id": "1e03e887dbbe9fa9",
+    "type": "velbus-scan",
+    "z": "5f2cf5800b416cce",
+    "name": "",
+    "bridge": "bridge-scan-and-debug",
+    "rtrDelay": 75,
+    "collectTime": 8000,
+    "x": 650,
+    "y": 60,
+    "wires": [
+      [
+        "272afe3a2903b2ce"
+      ],
+      [
+        "683d6cd1c8bf637e"
+      ]
+    ]
+  },
+  {
+    "id": "6467b1256f6ad42b",
+    "type": "inject",
+    "z": "5f2cf5800b416cce",
+    "name": "Scan",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "true",
+    "payloadType": "bool",
+    "x": 310,
+    "y": 60,
+    "wires": [
+      [
+        "1e03e887dbbe9fa9"
+      ]
+    ]
+  },
+  {
+    "id": "272afe3a2903b2ce",
+    "type": "debug",
+    "z": "5f2cf5800b416cce",
+    "name": "Velbus Scan results",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 910,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "683d6cd1c8bf637e",
+    "type": "debug",
+    "z": "5f2cf5800b416cce",
+    "name": "Velbus modules found",
+    "active": true,
+    "tosidebar": false,
+    "console": false,
+    "tostatus": true,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "payload.module",
+    "statusType": "msg",
+    "x": 920,
+    "y": 80,
+    "wires": []
+  }
 ]
